@@ -1,9 +1,6 @@
 package Database;
 
-import Client.UserAccount;
-
 import java.sql.*;
-import java.util.ArrayList;
 
 public class UserDAO {
     private Connection conn;
@@ -41,6 +38,10 @@ public class UserDAO {
             return ps.executeUpdate() > 0; // Retourne true si l'insertion a réussi
         }
     }
+
+
+
+
 
 
 }

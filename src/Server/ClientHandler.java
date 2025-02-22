@@ -1,13 +1,12 @@
 package Server;
 
-import Client.UserAccount;
+import Entities.User;
 import Database.MessageDAO;
 import Database.UserDAO;
 
 import java.io.*;
-import java.net.Socket;
+        import java.net.Socket;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Base64;
 
 public class ClientHandler extends Thread {
@@ -15,7 +14,7 @@ public class ClientHandler extends Thread {
     private final DataOutputStream dos;
     private final Socket commthread;
     private boolean Auth;
-    private UserAccount userAccount;
+    private User userAccount;
     private UserDAO userDAO;
     private MessageDAO messageDAO;
 
@@ -55,18 +54,13 @@ public class ClientHandler extends Thread {
                             password = this.dis.readLine();
                             Auth = login(email, password);
                             break;
-                        case "c":  // Exit case
-                            this.dos.writeUTF("Goodbye!");
-                            return;
                         default:
                             this.dos.writeUTF("Invalid choice, please try again");
                     }
                 } while (!Auth);
 
-
-
                 if (Auth) {
-                    receiveAndDeleteMessages();
+                    userMenu();
                 }
             }
         } catch (IOException e) {
@@ -74,7 +68,6 @@ public class ClientHandler extends Thread {
             e.printStackTrace();
         } finally {
             try {
-                // Ensure resources are closed
                 if (dis != null) dis.close();
                 if (dos != null) dos.close();
                 if (commthread != null && !commthread.isClosed()) commthread.close();
@@ -84,12 +77,41 @@ public class ClientHandler extends Thread {
         }
     }
 
+    private void userMenu() throws IOException {
+        String choice;
+        do {
+            this.dos.writeUTF("\n====== User Menu ======\n");
+            this.dos.writeUTF("a. Send a message\n");
+            this.dos.writeUTF("b. View received messages\n");
+            this.dos.writeUTF("c. Logout\n");
+            this.dos.writeUTF("=======================\n");
+            this.dos.writeUTF("Please enter your choice:");
+
+            choice = this.dis.readLine();
+            switch (choice) {
+                case "a":
+                    sendMessage();
+                    break;
+                case "b":
+                    receiveAndDeleteMessages();
+                    break;
+                case "c":
+                    userAccount.disconnect();
+                    this.dos.writeUTF("Logging out...");
+                    Auth = false;
+                    break;
+                default:
+                    this.dos.writeUTF("Invalid choice, please try again");
+            }
+        } while (Auth);
+    }
+
     private boolean login(String login, String password) {
         try {
             var rs = messageDAO.getUserByEmailAndPassword(login, password);
             if (rs.next()) {
                 dos.writeUTF("Login Successful");
-                userAccount = new UserAccount(rs.getInt("user_id"), rs.getString("email"), rs.getString("name"), dos, dis);
+                userAccount = new User(rs.getInt("user_id"), rs.getString("email"), rs.getString("name"), dos, dis);
                 return true;
             }
             dos.writeUTF("Login Failed");
@@ -119,25 +141,33 @@ public class ClientHandler extends Thread {
         return false;
     }
 
+    private void sendMessage() throws IOException {
+        this.dos.writeUTF("Enter recipient email:");
+        String recipient = this.dis.readLine();
+        this.dos.writeUTF("Enter your message:");
+        String message = this.dis.readLine();
+
+        boolean sent = userAccount.sendMessage(recipient, "text:" + message);
+        if (sent) {
+            this.dos.writeUTF("Message sent successfully.");
+        } else {
+            this.dos.writeUTF("Failed to send message.");
+        }
+    }
+
     private void receiveAndDeleteMessages() {
         try {
             var messages = messageDAO.getMessagesForUser(userAccount.getEmail());
             for (var msg : messages) {
-                if (msg.getMessageType().equals("text")) {
-                    dos.writeUTF(msg.getMessageType() + "Message From " + msg.getSenderEmail() + "At" + msg.getDate() + ":" + msg.getContent());
-                } else {
-                    dos.writeUTF(msg.getMessageType() + "Message From " + msg.getSenderEmail() + "At" + msg.getDate() + ":" + msg.getFileName());
-                    byte[] bytes = Base64.getDecoder().decode(msg.getContent());
-                    dos.writeInt(bytes.length);
-                    dos.write(bytes);
-                }
+                dos.writeUTF("From " + msg.getSenderEmail() + " at " + msg.getDate() + ": " + msg.getMessage());
             }
             messageDAO.deleteMessagesForUser(userAccount.getEmail());
-        } catch (SQLException | IOException e) {
+        } catch (IOException e) {
             System.err.println("Error while receiving or deleting messages: " + e.getMessage());
             e.printStackTrace();
         }
     }
+
 
     private void showMenu() throws IOException {
         try {
@@ -152,4 +182,5 @@ public class ClientHandler extends Thread {
             throw e;  // Re-throw to be caught in the calling method
         }
     }
+
 }
