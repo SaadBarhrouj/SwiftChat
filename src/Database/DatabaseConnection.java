@@ -1,36 +1,29 @@
 package Database;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 
 public class DatabaseConnection {
-    private Connection conn;
-    private Statement stmt;
+    private static final String URL = "jdbc:mysql://localhost:3306/swiftchat";
+    private static final String USER = "root";
+    private static final String PASSWORD = "";
 
-    public DatabaseConnection(String url, String user, String password) {
+    /**
+     * Établit une connexion à la base de données.
+     *
+     * @return Une instance de Connection si la connexion réussit, sinon null.
+     */
+    public static Connection getConnection() {
+        Connection conn = null;
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
-            this.conn = DriverManager.getConnection(url, user, password);
-            this.stmt = this.conn.createStatement();
+            conn = DriverManager.getConnection(URL, USER, PASSWORD);
+            System.out.println("Connected to database successfully.");
         } catch (ClassNotFoundException | SQLException e) {
             e.printStackTrace();
-            System.out.println("Erreur de connexion à la base de données");
+            System.out.println("Failed to connect to the database.");
         }
-    }
-
-    public Statement getStatement() {
-        return this.stmt;
-    }
-
-    public Connection getConnection() {
-        return this.conn;
-    }
-
-    public void close() {
-        try {
-            if (this.stmt != null) this.stmt.close();
-            if (this.conn != null) this.conn.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        return conn;
     }
 }
