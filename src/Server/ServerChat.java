@@ -16,15 +16,12 @@ import java.util.List;
  * and handles communication with connected clients.
  */
 public class ServerChat {
-    public static int numClient;
-    public static List <String> clientHandlersList=new ArrayList<>();
     /**
      * Main method to start the server and handle client connections.
      *
      * @param args Command-line arguments (not used in this implementation).
      */
     public static void main(String[] args) {
-        clientHandlersList.add("saad");
         // ServerSocket for accepting client connections
         ServerSocket serverSocket = null;
 
@@ -57,7 +54,6 @@ public class ServerChat {
                 // Create a new thread to handle the client
                 Thread clientHandlerThread = new ClientHandler(clientSocket, dataInputStream, dataOutputStream);
 
-                ++numClient;
                 clientHandlerThread.start(); // Start the thread (assuming ClientHandler implements Runnable)
             } catch (Exception e) {
                 // Print stack trace for any exceptions during client handling
