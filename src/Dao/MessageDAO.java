@@ -1,6 +1,6 @@
-package Database;
+package Dao;
 
-import DAO.Message;
+import Entities.Message;
 import java.sql.*;
 import java.util.ArrayList;
 

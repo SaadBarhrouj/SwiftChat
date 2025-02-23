@@ -1,4 +1,4 @@
-package DAO;
+package Entities;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -10,9 +10,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import Database.DatabaseConnection;
-import Database.MessageDAO;
-import Database.UserDAO;
+import Dao.DatabaseConnection;
+import Dao.MessageDAO;
+import Dao.UserDAO;
 
 public class User {
     private int id;

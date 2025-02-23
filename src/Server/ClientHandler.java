@@ -1,8 +1,8 @@
 package Server;
 
-import DAO.User;
-import Database.MessageDAO;
-import Database.UserDAO;
+import Entities.User;
+import Dao.MessageDAO;
+import Dao.UserDAO;
 
 import java.io.*;
 import java.net.Socket;
@@ -137,7 +137,7 @@ public class ClientHandler extends Thread {
                     return true;
                 }
             }
-        } catch (SQLException | IOException e) {
+        } catch (Exception e) {
             System.err.println("Erreur lors de l'inscription : " + e.getMessage());
             e.printStackTrace();
         }

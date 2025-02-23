@@ -1,4 +1,4 @@
-package DAO;
+package Entities;
 
 public class Message {
     private int messageId;  // Added to represent message_id from table
