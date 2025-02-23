@@ -1,6 +1,6 @@
 package Server;
 
-import Entities.User;
+import DAO.User;
 import Database.MessageDAO;
 import Database.UserDAO;
 

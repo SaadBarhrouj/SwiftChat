@@ -1,4 +1,4 @@
-package Entities;
+package DAO;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -6,12 +6,13 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import Database.DatabaseConnection;
 import Database.MessageDAO;
-import java.util.HashMap;
-import java.util.Map;
+import Database.UserDAO;
 
 public class User {
     private int id;
@@ -24,7 +25,8 @@ public class User {
     private static Map<String, DataOutputStream> mapDos = new HashMap<>(); // Stocker les streams des utilisateurs en ligne
 
     private Connection conn;
-    private MessageDAO messageDAO; // Ajout de l'instance de MessageDAO
+    private MessageDAO messageDAO; // Pour gérer les messages
+    private UserDAO userDAO; // Pour gérer les mises à jour du profil
 
     public User(int id, String email, String name, DataOutputStream dos, DataInputStream dis) {
         this.id = id;
@@ -34,13 +36,20 @@ public class User {
         this.dis = dis;
         this.conn = DatabaseConnection.getConnection();
         this.messageDAO = new MessageDAO(); // Initialisation de MessageDAO
+        this.userDAO = new UserDAO(); // Initialisation de UserDAO
         mapDos.put(email, dos); // Ajouter au map des utilisateurs en ligne
     }
 
+    /**
+     * Verrouille l'utilisateur pour les opérations thread-safe.
+     */
     public void lockMe() {
         lock.lock();
     }
 
+    /**
+     * Déverrouille l'utilisateur.
+     */
     public void unlockMe() {
         lock.unlock();
     }
@@ -108,7 +117,6 @@ public class User {
         // Si le destinataire n'est pas en ligne, sauvegarder le fichier dans la base de données
         try {
             String encodedFileData = Base64.getEncoder().encodeToString(fileData); // Encoder les données en Base64
-            // Convertir le timestamp en une date MySQL valide
             Timestamp sqlTimestamp = new Timestamp(System.currentTimeMillis());
             messageDAO.insertMessage(this.getEmail(), target, encodedFileData, "file", fileName, sqlTimestamp);
             return true;
@@ -118,14 +126,71 @@ public class User {
         }
     }
 
+    /**
+     * Met à jour le nom de l'utilisateur.
+     *
+     * @param newName Le nouveau nom.
+     */
+    public void updateName(String newName) {
+        this.name = newName;
+        userDAO.updateName(this.id, newName); // Appel à UserDAO
+    }
+
+    /**
+     * Met à jour l'email de l'utilisateur.
+     *
+     * @param newEmail Le nouvel email.
+     */
+    public void updateEmail(String newEmail) {
+        this.email = newEmail.toLowerCase();
+        userDAO.updateEmail(this.id, newEmail); // Appel à UserDAO
+    }
+
+    /**
+     * Met à jour le mot de passe de l'utilisateur.
+     *
+     * @param newPassword Le nouveau mot de passe.
+     */
+    public void updatePassword(String newPassword) {
+        this.password = newPassword;
+        userDAO.updatePassword(this.id, newPassword); // Appel à UserDAO
+    }
+
+    /**
+     * Met à jour le profil complet de l'utilisateur (nom, email, mot de passe).
+     *
+     * @param newEmail    Le nouvel email.
+     * @param newPassword Le nouveau mot de passe.
+     * @param newName     Le nouveau nom.
+     */
+    public void updateProfile(String newEmail, String newPassword, String newName) {
+        updateEmail(newEmail);
+        updateName(newName);
+        updatePassword(newPassword);
+        System.out.println("Profil mis à jour avec succès !");
+    }
+
+    /**
+     * Récupère l'ID de l'utilisateur.
+     *
+     * @return L'ID de l'utilisateur.
+     */
     public int getId() {
         return id;
     }
 
+    /**
+     * Récupère l'email de l'utilisateur.
+     *
+     * @return L'email de l'utilisateur.
+     */
     public String getEmail() {
         return email;
     }
 
+    /**
+     * Déconnecte l'utilisateur.
+     */
     public void disconnect() {
         mapDos.remove(this.email); // Retirer l'utilisateur de la liste des utilisateurs en ligne
         System.out.println(this.getEmail() + " déconnecté");
