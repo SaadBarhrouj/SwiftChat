@@ -4,12 +4,12 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Base64;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import Database.DatabaseConnection;
+import Database.MessageDAO;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,6 +24,7 @@ public class User {
     private static Map<String, DataOutputStream> mapDos = new HashMap<>(); // Stocker les streams des utilisateurs en ligne
 
     private Connection conn;
+    private MessageDAO messageDAO; // Ajout de l'instance de MessageDAO
 
     public User(int id, String email, String name, DataOutputStream dos, DataInputStream dis) {
         this.id = id;
@@ -32,6 +33,7 @@ public class User {
         this.dos = dos;
         this.dis = dis;
         this.conn = DatabaseConnection.getConnection();
+        this.messageDAO = new MessageDAO(); // Initialisation de MessageDAO
         mapDos.put(email, dos); // Ajouter au map des utilisateurs en ligne
     }
 
@@ -43,34 +45,21 @@ public class User {
         lock.unlock();
     }
 
+    /**
+     * Envoie un message à un destinataire.
+     *
+     * @param target Email du destinataire.
+     * @param msg    Contenu du message.
+     * @return true si le message a été envoyé avec succès, sinon false.
+     */
     public boolean sendMessage(String target, String msg) {
-        String[] s = msg.split(":");
+        System.out.println(this.getEmail() + " envoie un message à " + target);
 
-        if (!s[0].equals("videoCall") && !s[0].equals("audioCall")) {
-            System.out.println(this.getEmail() + " envoie " + s[0] + " à " + target);
-        }
-
-        byte[] bytes = new byte[0];
-
-        if (!s[0].equals("text")) {
-            try {
-                int i = dis.readInt();
-                bytes = new byte[i];
-                dis.readFully(bytes);
-            } catch (IOException e) {
-                e.printStackTrace();
-                return false;
-            }
-        }
-
-        if (mapDos.containsKey(target)) { // Vérifier si le destinataire est en ligne
+        // Vérifier si le destinataire est en ligne
+        if (mapDos.containsKey(target)) {
             try {
                 DataOutputStream targetDos = mapDos.get(target);
-                targetDos.writeUTF(msg);
-                if (!s[0].equals("text")) {
-                    targetDos.writeInt(bytes.length);
-                    targetDos.write(bytes);
-                }
+                targetDos.writeUTF("Nouveau message de " + this.getEmail() + " : " + msg); // Envoyer le message en clair
                 return true;
             } catch (IOException e) {
                 e.printStackTrace();
@@ -79,32 +68,54 @@ public class User {
             }
         }
 
-        // Si l'utilisateur n'est pas en ligne, sauvegarder le message dans la base de données
-        String sql;
-        if (s[0].equals("text")) {
-            sql = "INSERT INTO messages (sender_Email, receiver_Email, message, messageType, date) VALUES (?, ?, ?, ?, ?)";
-        } else {
-            sql = "INSERT INTO messages (sender_Email, receiver_Email, message, messageType, fileName, date) VALUES (?, ?, ?, ?, ?, ?)";
-        }
-
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, this.getEmail());
-            pstmt.setString(2, target);
-            pstmt.setString(3, s[0].equals("text") ? s[3] : new String(Base64.getEncoder().encode(bytes)));
-            pstmt.setString(4, s[0]);
-            if (!s[0].equals("text")) {
-                pstmt.setString(5, s[3]);
-                pstmt.setString(6, s[2]);
-            } else {
-                pstmt.setString(5, s[2]);
-            }
-            pstmt.executeUpdate();
-        } catch (SQLException e) {
+        // Si le destinataire n'est pas en ligne, sauvegarder le message dans la base de données
+        try {
+            Timestamp sqlTimestamp = new Timestamp(System.currentTimeMillis());
+            messageDAO.insertMessage(this.getEmail(), target, msg, "text", null, sqlTimestamp);
+            return true;
+        } catch (Exception e) {
             e.printStackTrace();
             return false;
         }
+    }
 
-        return true;
+    /**
+     * Envoie un fichier (image, vidéo, etc.) à un destinataire.
+     *
+     * @param target   Email du destinataire.
+     * @param fileName Nom du fichier.
+     * @param fileData Données du fichier.
+     * @return true si le fichier a été envoyé avec succès, sinon false.
+     */
+    public boolean sendFile(String target, String fileName, byte[] fileData) {
+        System.out.println(this.getEmail() + " envoie un fichier à " + target);
+
+        // Vérifier si le destinataire est en ligne
+        if (mapDos.containsKey(target)) {
+            try {
+                DataOutputStream targetDos = mapDos.get(target);
+                targetDos.writeUTF("file:" + fileName); // Envoyer le type de message et le nom du fichier
+                targetDos.writeInt(fileData.length); // Envoyer la taille des données
+                targetDos.write(fileData); // Envoyer les données du fichier
+                return true;
+            } catch (IOException e) {
+                e.printStackTrace();
+                System.out.println("Échec d'envoi du fichier");
+                return false;
+            }
+        }
+
+        // Si le destinataire n'est pas en ligne, sauvegarder le fichier dans la base de données
+        try {
+            String encodedFileData = Base64.getEncoder().encodeToString(fileData); // Encoder les données en Base64
+            // Convertir le timestamp en une date MySQL valide
+            Timestamp sqlTimestamp = new Timestamp(System.currentTimeMillis());
+            messageDAO.insertMessage(this.getEmail(), target, encodedFileData, "file", fileName, sqlTimestamp);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     public int getId() {
@@ -116,24 +127,7 @@ public class User {
     }
 
     public void disconnect() {
-       /* mapDos.remove(this);
-        for (int i = 0; i < this.myGroups.size(); i++) {
-            this.myGroups.get(i).memberDisconnected(this.getId());
-            if (this.myGroups.get(i).allOffline()) {
-                allGroups.remove(this.myGroups.get(i));
-            }
-        }
-        Iterator<Map.Entry<Profile, DataOutputStream>> iterator = mapDos.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Profile, DataOutputStream> entry = iterator.next();
-            entry.getKey().lockMe();
-            try {
-                entry.getValue().writeUTF("disconnection@@@" + this.getEmail());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            entry.getKey().unlockMe();
-        }*/
-        System.out.println(this.getEmail() + " disconnect");
+        mapDos.remove(this.email); // Retirer l'utilisateur de la liste des utilisateurs en ligne
+        System.out.println(this.getEmail() + " déconnecté");
     }
 }

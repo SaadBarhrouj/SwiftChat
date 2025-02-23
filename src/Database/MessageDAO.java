@@ -11,13 +11,7 @@ public class MessageDAO {
         this.conn = DatabaseConnection.getConnection();
     }
 
-    public ResultSet getUserByEmailAndPassword(String email, String password) throws SQLException {
-        String sql = "SELECT * FROM users WHERE email = ? AND password = ?";
-        PreparedStatement ps = conn.prepareStatement(sql);
-        ps.setString(1, email);
-        ps.setString(2, password);
-        return ps.executeQuery();
-    }
+
 
     public ArrayList<Message> getMessagesForUser(String email) {
         ArrayList<Message> messages = new ArrayList<>();
@@ -46,6 +40,21 @@ public class MessageDAO {
         String sql = "DELETE FROM messages WHERE receiver_Email = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, email);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void insertMessage(String senderEmail, String receiverEmail, String message, String messageType, String fileName, Timestamp date) {
+        String sql = "INSERT INTO messages (sender_Email, receiver_Email, message, messageType, fileName, date) VALUES (?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, senderEmail);
+            ps.setString(2, receiverEmail);
+            ps.setString(3, message);
+            ps.setString(4, messageType);
+            ps.setString(5, fileName);
+            ps.setTimestamp(6, date); // Utiliser setTimestamp pour la date
             ps.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();

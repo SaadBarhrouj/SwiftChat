@@ -39,7 +39,13 @@ public class UserDAO {
         }
     }
 
-
+    public ResultSet getUserByEmailAndPassword(String email, String password) throws SQLException {
+        String sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, email);
+        ps.setString(2, password);
+        return ps.executeQuery();
+    }
 
 
 
