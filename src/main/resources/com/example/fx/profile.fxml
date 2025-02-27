@@ -6,6 +6,7 @@
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.effect.DropShadow?>
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
@@ -15,20 +16,21 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
-<AnchorPane prefHeight="450.0" prefWidth="540.0" style="-fx-background-color: #ffffff;" xmlns="http://javafx.com/javafx/17.0.6" xmlns:fx="http://javafx.com/fxml/1" fx:controller="Controller.MainController">
+<AnchorPane prefHeight="450.0" prefWidth="540.0" style="-fx-background-color: #f0f0f0;" xmlns="http://javafx.com/javafx/17.0.6" xmlns:fx="http://javafx.com/fxml/1" fx:controller="Controller.MainController">
     <children>
         <BorderPane prefHeight="600.0" prefWidth="900.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+            <!-- Left Section -->
             <left>
-                <VBox prefHeight="600.0" prefWidth="200.0" style="-fx-background-color: #26293e;" BorderPane.alignment="CENTER">
+                <VBox prefHeight="600.0" prefWidth="200.0" style="-fx-background-color: #ffffff; -fx-border-color: #eeeeee; -fx-border-width: 0 1 0 0;" BorderPane.alignment="CENTER">
                     <children>
                         <HBox alignment="CENTER" prefHeight="100.0" prefWidth="200.0" spacing="10.0">
                             <children>
                                 <ImageView fitHeight="50.0" fitWidth="50.0" pickOnBounds="true" preserveRatio="true">
                                     <image>
-                                        <Image url="@profile_placeholder.png" />
+                                        <Image url="@logo.png" />
                                     </image>
                                 </ImageView>
-                                <Label fx:id="userNameLabel" textFill="WHITE">
+                                <Label fx:id="userNameLabel" textFill="#333">
                                     <font>
                                         <Font name="System Bold" size="16.0" />
                                     </font>
@@ -41,10 +43,10 @@
                                     <children>
                                         <ImageView fitHeight="20.0" fitWidth="20.0" pickOnBounds="true" preserveRatio="true">
                                             <image>
-                                                <Image url="@profile_icon.png" />
+                                                <Image url="@profile.png" />
                                             </image>
                                         </ImageView>
-                                        <Label text="PROFILE" textFill="#b8b9be">
+                                        <Label text="PROFILE" textFill="#333">
                                             <font>
                                                 <Font name="System Bold" size="14.0" />
                                             </font>
@@ -54,14 +56,14 @@
                                         <Insets left="20.0" />
                                     </padding>
                                 </HBox>
-                                <HBox alignment="CENTER_LEFT" prefHeight="40.0" prefWidth="200.0" spacing="15.0" style="-fx-background-color: #1e2135;">
+                                <HBox alignment="CENTER_LEFT" prefHeight="40.0" prefWidth="200.0" spacing="15.0" style="-fx-background-color: #f3f3f3;">
                                     <children>
                                         <ImageView fitHeight="20.0" fitWidth="20.0" pickOnBounds="true" preserveRatio="true">
                                             <image>
-                                                <Image url="@chat_icon.png" />
+                                                <Image url="@chat.png" />
                                             </image>
                                         </ImageView>
-                                        <Label text="CHAT" textFill="WHITE">
+                                        <Label text="CHAT" textFill="#333">
                                             <font>
                                                 <Font name="System Bold" size="14.0" />
                                             </font>
@@ -75,10 +77,10 @@
                                     <children>
                                         <ImageView fitHeight="20.0" fitWidth="20.0" pickOnBounds="true" preserveRatio="true">
                                             <image>
-                                                <Image url="@calendar_icon.png" />
+                                                <Image url="@groups.png" />
                                             </image>
                                         </ImageView>
-                                        <Label text="Groups" textFill="#b8b9be">
+                                        <Label text="Groups" textFill="#333">
                                             <font>
                                                 <Font name="System Bold" size="14.0" />
                                             </font>
@@ -92,10 +94,10 @@
                                     <children>
                                         <ImageView fitHeight="20.0" fitWidth="20.0" pickOnBounds="true" preserveRatio="true">
                                             <image>
-                                                <Image url="@documents_icon.png" />
+                                                <Image url="@logout.png" />
                                             </image>
                                         </ImageView>
-                                        <Label text="Contact" textFill="#b8b9be">
+                                        <Label text="Contact" textFill="#333">
                                             <font>
                                                 <Font name="System Bold" size="14.0" />
                                             </font>
@@ -112,10 +114,13 @@
                                                 <Image url="@settings_icon.png" />
                                             </image>
                                         </ImageView>
-                                        <Button fx:id="logoutButton" mnemonicParsing="false" onAction="#handleLogout" text="LOGOUT" textFill="#b8b9be">
+                                        <Button fx:id="logoutButton" mnemonicParsing="false" onAction="#handleLogout" prefWidth="87.0" style="-fx-background-color: linear-gradient(to right, #8ecdd5, #134b81, #0494d7); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10;" text="LOGOUT">
                                             <font>
                                                 <Font name="System Bold" size="14.0" />
                                             </font>
+                                            <effect>
+                                                <DropShadow color="rgba(0, 0, 0, 0.3)" radius="10.0" spread="0.5" />
+                                            </effect>
                                         </Button>
                                     </children>
                                     <padding>
@@ -130,28 +135,10 @@
                     </children>
                 </VBox>
             </left>
+
+            <!-- Center Section -->
             <center>
                 <BorderPane prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
-                    <top>
-                        <HBox alignment="CENTER_LEFT" prefHeight="60.0" prefWidth="200.0" style="-fx-border-color: #eeeeee; -fx-border-width: 0 0 1 0;" BorderPane.alignment="CENTER">
-                            <children>
-                                <Label text="Chat" textFill="#26293e">
-                                    <font>
-                                        <Font name="System Bold" size="18.0" />
-                                    </font>
-                                </Label>
-                                <Pane prefHeight="60.0" prefWidth="500.0" HBox.hgrow="ALWAYS" />
-                                <TextField prefHeight="30.0" prefWidth="200.0" promptText="Search" style="-fx-background-radius: 15; -fx-border-radius: 15; -fx-background-color: #f3f3f3;">
-                                    <HBox.margin>
-                                        <Insets right="15.0" />
-                                    </HBox.margin>
-                                </TextField>
-                            </children>
-                            <padding>
-                                <Insets left="20.0" right="10.0" />
-                            </padding>
-                        </HBox>
-                    </top>
                     <center>
                         <ListView prefHeight="390.0" prefWidth="95.0" style="-fx-background-color: #ffffff; -fx-border-color: #eeeeee; -fx-border-width: 0 1 0 0;" BorderPane.alignment="CENTER">
                             <!-- This would be populated with custom list cells in the controller -->
@@ -159,6 +146,8 @@
                     </center>
                 </BorderPane>
             </center>
+
+            <!-- Right Section -->
             <right>
                 <BorderPane prefHeight="600.0" prefWidth="400.0" BorderPane.alignment="CENTER">
                     <top>
@@ -166,7 +155,7 @@
                             <children>
                                 <HBox alignment="CENTER_LEFT" prefHeight="60.0" prefWidth="200.0" style="-fx-border-color: #eeeeee; -fx-border-width: 0 0 1 0;">
                                     <children>
-                                        <Label text="Gold Coast" textFill="#26293e">
+                                        <Label text="Gold Coast" textFill="#333">
                                             <font>
                                                 <Font name="System Bold" size="18.0" />
                                             </font>
@@ -220,7 +209,7 @@
                                                         <Insets right="10.0" />
                                                     </HBox.margin>
                                                 </ImageView>
-                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="We invite you at our office" textFill="#26293e">
+                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="We invite you at our office" textFill="#333">
                                                     <padding>
                                                         <Insets bottom="8.0" left="15.0" right="15.0" top="8.0" />
                                                     </padding>
@@ -266,7 +255,7 @@
                                                         <Insets right="10.0" />
                                                     </HBox.margin>
                                                 </ImageView>
-                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="Welcome" textFill="#26293e">
+                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="Welcome" textFill="#333">
                                                     <padding>
                                                         <Insets bottom="8.0" left="15.0" right="15.0" top="8.0" />
                                                     </padding>
@@ -289,7 +278,7 @@
                                         </Label>
                                         <HBox alignment="CENTER_RIGHT" prefWidth="200.0">
                                             <children>
-                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="Welcome" textFill="#26293e">
+                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="Welcome" textFill="#333">
                                                     <padding>
                                                         <Insets bottom="8.0" left="15.0" right="15.0" top="8.0" />
                                                     </padding>
@@ -304,7 +293,7 @@
                                         </HBox>
                                         <HBox alignment="CENTER_RIGHT" prefWidth="200.0">
                                             <children>
-                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="Hello there" textFill="#26293e">
+                                                <Label style="-fx-background-color: #f3f3f3; -fx-background-radius: 15;" text="Hello there" textFill="#333">
                                                     <padding>
                                                         <Insets bottom="8.0" left="15.0" right="15.0" top="8.0" />
                                                     </padding>

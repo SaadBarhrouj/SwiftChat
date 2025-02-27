@@ -202,6 +202,7 @@ public class ClientHandler extends Thread {
             e.printStackTrace();
             return false;
         }
+
     }
 
     private boolean register(String name, String email, String password) {
