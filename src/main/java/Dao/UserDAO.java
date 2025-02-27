@@ -49,6 +49,19 @@ public class UserDAO {
             return null;
         }
     }
+    public String getUserName(String email) {
+        String sql = "SELECT name FROM users WHERE email = ?";
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, email);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("name");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 
     /**
      * Met à jour le nom d'un utilisateur dans la base de données.
