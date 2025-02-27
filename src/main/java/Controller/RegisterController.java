@@ -2,11 +2,14 @@ package Controller;
 
 import Dao.UserDAO;
 import javafx.fxml.FXML;
-import javafx.scene.control.Button;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.TextField;
-import javafx.scene.control.Alert;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
 import javafx.scene.control.Alert.AlertType;
+import javafx.stage.Stage;
+
+import java.io.IOException;
 
 public class RegisterController {
 
@@ -21,6 +24,27 @@ public class RegisterController {
 
     @FXML
     private Button registerButton;
+    @FXML
+    private Hyperlink loginLink;
+
+
+    @FXML
+    private void initialize() {
+        // Redirect to Login Page
+        loginLink.setOnAction(event -> {
+            try {
+                Parent root = FXMLLoader.load(getClass().getResource("/com/example/fx/login.fxml"));
+                Stage stage = (Stage) loginLink.getScene().getWindow();
+                stage.setScene(new Scene(root));
+                stage.show();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+
+        // Register Button Action
+        registerButton.setOnAction(event -> handleRegister());
+    }
 
     private UserDAO userDAO;
 
@@ -28,10 +52,7 @@ public class RegisterController {
         userDAO = new UserDAO(); // Initialize UserDAO
     }
 
-    @FXML
-    private void initialize() {
-        registerButton.setOnAction(event -> registerUser ());
-    }
+
 
     private void registerUser () {
         String name = usernameField.getText().trim();
@@ -68,6 +89,24 @@ public class RegisterController {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    @FXML
+    private void handleRegister() {
+        String name = usernameField.getText();
+        String email = emailField.getText();
+        String password = passwordField.getText();
+
+        UserDAO userDAO = new UserDAO();
+        if (userDAO.userExists(email)) {
+            System.out.println("Email already exists.");
+        } else {
+            if (userDAO.insertUser(name, email, password)) {
+                System.out.println("Registration successful!");
+            } else {
+                System.out.println("Registration failed.");
+            }
+        }
     }
 
 }
