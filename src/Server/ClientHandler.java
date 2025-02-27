@@ -121,7 +121,8 @@ public class ClientHandler extends Thread {
             this.dos.writeUTF("b. Envoyer un fichier\n");
             this.dos.writeUTF("c. Créer un groupe\n");
             this.dos.writeUTF("d. Rejoindre un groupe\n");
-            this.dos.writeUTF("e. Se déconnecter\n");
+            this.dos.writeUTF("e. Mettre à jour le profil\n"); // Nouvelle option
+            this.dos.writeUTF("f. Se déconnecter\n");
             this.dos.writeUTF("==============================\n");
             this.dos.writeUTF("Veuillez entrer votre choix :");
 
@@ -139,7 +140,10 @@ public class ClientHandler extends Thread {
                 case "d":
                     joinGroup();
                     break;
-                case "e":
+                case "e": // Nouveau cas pour la mise à jour du profil
+                    updateProfile();
+                    break;
+                case "f":
                     logout();
                     showMenu();
                     break;
@@ -151,9 +155,9 @@ public class ClientHandler extends Thread {
 
     private void createGroup() throws IOException {
         this.dos.writeUTF("Entrez le nom du groupe :");
-        String name = this.dis.readUTF();
+        String name = this.dis.readLine();
         this.dos.writeUTF("Entrez la description du groupe :");
-        String description = this.dis.readUTF();
+        String description = this.dis.readLine();
 
         if (groupDAO.createGroup(name, description, userAccount.getId())) {
             this.dos.writeUTF("Groupe créé avec succès.");
@@ -164,16 +168,25 @@ public class ClientHandler extends Thread {
 
     private void joinGroup() throws IOException {
         this.dos.writeUTF("Entrez l'ID du groupe :");
-        int groupId = Integer.parseInt(this.dis.readUTF());
+        int groupId = Integer.parseInt(this.dis.readLine());
 
         Group group = groupDAO.getGroupById(groupId);
         if (group != null) {
-            userAccount.addGroup(group);
-            this.dos.writeUTF("Vous avez rejoint le groupe " + group.getName());
+            // Ajouter l'utilisateur au groupe dans la base de données
+            boolean added = groupDAO.addUserToGroup(userAccount.getId(), groupId);
+            if (added) {
+                // Ajouter le groupe à la liste des groupes de l'utilisateur en mémoire
+                userAccount.addGroup(group);
+                this.dos.writeUTF("Vous avez rejoint le groupe " + group.getName());
+            } else {
+                this.dos.writeUTF("Erreur lors de l'ajout au groupe.");
+            }
         } else {
             this.dos.writeUTF("Groupe introuvable.");
         }
     }
+
+
 
     private boolean login(String email, String password) {
         try {
@@ -241,9 +254,9 @@ public class ClientHandler extends Thread {
 
     private void sendUserFile() throws IOException {
         this.dos.writeUTF("Entrez l'email du destinataire :");
-        String recipient = this.dis.readUTF();
+        String recipient = this.dis.readLine();
         this.dos.writeUTF("Entrez le chemin complet du fichier :");
-        String filePath = this.dis.readUTF();
+        String filePath = this.dis.readLine();
 
         try {
             byte[] fileData = Files.readAllBytes(Paths.get(filePath));
@@ -259,6 +272,22 @@ public class ClientHandler extends Thread {
             this.dos.writeUTF("Erreur lors de la lecture du fichier : " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+
+
+    private void updateProfile() throws IOException {
+        this.dos.writeUTF("Entrez votre nouveau nom :");
+        String newName = this.dis.readLine();
+        this.dos.writeUTF("Entrez votre nouvel email :");
+        String newEmail = this.dis.readLine();
+        this.dos.writeUTF("Entrez votre nouveau mot de passe :");
+        String newPassword = this.dis.readLine();
+
+        // Mettre à jour le profil de l'utilisateur
+        userAccount.updateProfile(newEmail, newPassword, newName);
+
+        this.dos.writeUTF("Profil mis à jour avec succès !");
     }
 
     private void logout() {
