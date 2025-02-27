@@ -4,6 +4,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+import Entities.User;
 
 public class UserDAO {
     private Connection conn;
@@ -12,12 +16,6 @@ public class UserDAO {
         this.conn = DatabaseConnection.getConnection();
     }
 
-    /**
-     * Vérifie si un utilisateur existe dans la base de données.
-     *
-     * @param email L'email de l'utilisateur.
-     * @return true si l'utilisateur existe, sinon false.
-     */
     public boolean userExists(String email) {
         String sql = "SELECT * FROM users WHERE email = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -30,19 +28,11 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Insère un nouvel utilisateur dans la base de données.
-     *
-     * @param name     Le nom de l'utilisateur.
-     * @param email    L'email de l'utilisateur.
-     * @param password Le mot de passe de l'utilisateur.
-     * @return true si l'insertion a réussi, sinon false.
-     */
     public boolean insertUser(String name, String email, String password) {
         String sql = "INSERT INTO users (name, email, password) VALUES (?, ?, ?)";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, name);
-            pstmt.setString(2, email);
+            pstmt.setString(2, email.toLowerCase());
             pstmt.setString(3, password);
             return pstmt.executeUpdate() > 0; // Retourne true si l'insertion a réussi
         } catch (SQLException e) {
@@ -51,18 +41,11 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Récupère un utilisateur par son email et son mot de passe.
-     *
-     * @param email    L'email de l'utilisateur.
-     * @param password Le mot de passe de l'utilisateur.
-     * @return Un ResultSet contenant les informations de l'utilisateur, ou null si non trouvé.
-     */
     public ResultSet getUserByEmailAndPassword(String email, String password) {
         String sql = "SELECT * FROM users WHERE email = ? AND password = ?";
         try {
             PreparedStatement pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, email);
+            pstmt.setString(1, email.toLowerCase());
             pstmt.setString(2, password);
             return pstmt.executeQuery();
         } catch (SQLException e) {

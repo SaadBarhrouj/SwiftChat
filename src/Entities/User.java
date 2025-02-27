@@ -5,6 +5,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import Dao.DatabaseConnection;
 import Dao.MessageDAO;
 import Dao.UserDAO;
+import Dao.GroupDAO;
 
 public class User {
     private int id;
@@ -27,40 +29,21 @@ public class User {
     private Connection conn;
     private MessageDAO messageDAO; // Pour gérer les messages
     private UserDAO userDAO; // Pour gérer les mises à jour du profil
+    private GroupDAO groupDAO; // Pour gérer les groupes
+    private static ArrayList<Group> allGroups = new ArrayList<>(); // Tous les groupes disponibles
+    private ArrayList<Group> myGroups = new ArrayList<>(); // Groupes auxquels l'utilisateur appartient
 
-    public User(int id, String email, String name, DataOutputStream dos, DataInputStream dis) {
+    public User(int id, String name, String email, String password) {
         this.id = id;
-        this.email = email;
         this.name = name;
-        this.dos = dos;
-        this.dis = dis;
+        this.email = email;
+        this.password = password;
         this.conn = DatabaseConnection.getConnection();
         this.messageDAO = new MessageDAO(); // Initialisation de MessageDAO
         this.userDAO = new UserDAO(); // Initialisation de UserDAO
-        mapDos.put(email, dos); // Ajouter au map des utilisateurs en ligne
+        this.groupDAO = new GroupDAO(); // Initialisation de GroupDAO
     }
 
-    /**
-     * Verrouille l'utilisateur pour les opérations thread-safe.
-     */
-    public void lockMe() {
-        lock.lock();
-    }
-
-    /**
-     * Déverrouille l'utilisateur.
-     */
-    public void unlockMe() {
-        lock.unlock();
-    }
-
-    /**
-     * Envoie un message à un destinataire.
-     *
-     * @param target Email du destinataire.
-     * @param msg    Contenu du message.
-     * @return true si le message a été envoyé avec succès, sinon false.
-     */
     public boolean sendMessage(String target, String msg) {
         System.out.println(this.getEmail() + " envoie un message à " + target);
 
@@ -88,14 +71,6 @@ public class User {
         }
     }
 
-    /**
-     * Envoie un fichier (image, vidéo, etc.) à un destinataire.
-     *
-     * @param target   Email du destinataire.
-     * @param fileName Nom du fichier.
-     * @param fileData Données du fichier.
-     * @return true si le fichier a été envoyé avec succès, sinon false.
-     */
     public boolean sendFile(String target, String fileName, byte[] fileData) {
         System.out.println(this.getEmail() + " envoie un fichier à " + target);
 
@@ -125,6 +100,24 @@ public class User {
             return false;
         }
     }
+
+    public void disconnect() {
+        mapDos.remove(this.email); // Retirer l'utilisateur de la liste des utilisateurs en ligne
+        System.out.println(this.getEmail() + " déconnecté");
+    }
+
+    public void addGroup(Group group) {
+        myGroups.add(group);
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
 
     /**
      * Met à jour le nom de l'utilisateur.
@@ -170,29 +163,4 @@ public class User {
         System.out.println("Profil mis à jour avec succès !");
     }
 
-    /**
-     * Récupère l'ID de l'utilisateur.
-     *
-     * @return L'ID de l'utilisateur.
-     */
-    public int getId() {
-        return id;
-    }
-
-    /**
-     * Récupère l'email de l'utilisateur.
-     *
-     * @return L'email de l'utilisateur.
-     */
-    public String getEmail() {
-        return email;
-    }
-
-    /**
-     * Déconnecte l'utilisateur.
-     */
-    public void disconnect() {
-        mapDos.remove(this.email); // Retirer l'utilisateur de la liste des utilisateurs en ligne
-        System.out.println(this.getEmail() + " déconnecté");
-    }
 }
