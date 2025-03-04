@@ -1,9 +1,8 @@
 package Server;
 
-import Dao.MessageDAO;
+import Dao.ContactDAO;
+import Entities.Contact;
 import Entities.User;
-import Entities.Group;
-import Dao.GroupDAO;
 import Dao.UserDAO;
 import Dao.DatabaseConnection;
 
@@ -13,9 +12,12 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.util.List;
 
+/**
+ * La classe ClientHandler gère la communication avec un client connecté au serveur.
+ * Elle permet la gestion de l'authentification (inscription et connexion), ainsi que la gestion des contacts.
+ */
 public class ClientHandler extends Thread {
     private final DataInputStream dis;
     private final DataOutputStream dos;
@@ -23,20 +25,25 @@ public class ClientHandler extends Thread {
     private boolean Auth;
     private User userAccount;
     private UserDAO userDAO;
-    private GroupDAO groupDAO;
-    private MessageDAO messageDAO;
     private Connection conn;
     private Statement stmt;
     private ResultSet rs;
+    private ContactDAO contactDAO;
 
+    /**
+     * Constructeur de la classe ClientHandler.
+     *
+     * @param s Socket du client.
+     * @param diss Flux d'entrée des données du client.
+     * @param doss Flux de sortie des données vers le client.
+     */
     public ClientHandler(Socket s, DataInputStream diss, DataOutputStream doss) {
         this.commthread = s;
         this.dis = diss;
         this.dos = doss;
         this.Auth = false;
         this.userDAO = new UserDAO();
-        this.groupDAO = new GroupDAO();
-        this.messageDAO = new MessageDAO();
+        this.contactDAO = new ContactDAO();
         this.conn = DatabaseConnection.getConnection();
         if (this.conn != null) {
             try {
@@ -51,6 +58,9 @@ public class ClientHandler extends Thread {
         }
     }
 
+    /**
+     * Méthode principale qui gère la boucle d'attente de l'authentification et le menu utilisateur.
+     */
     @Override
     public void run() {
         try {
@@ -58,24 +68,28 @@ public class ClientHandler extends Thread {
                 String choice = "";
                 do {
                     this.showMenu();
-                    choice = this.dis.readLine(); ;
+                    choice = this.dis.readLine();
 
-                    String name, email, password;
+                    String name, email, password, confirmPassword;
                     switch (choice) {
                         case "a":
+                            // Inscription
                             this.dos.writeUTF("Veuillez entrer votre nom :");
-                            name = this.dis.readLine(); ;
+                            name = this.dis.readLine();
                             this.dos.writeUTF("Veuillez entrer votre email :");
                             email = this.dis.readLine();
                             this.dos.writeUTF("Veuillez entrer votre mot de passe :");
-                            password = this.dis.readLine(); ;
-                            register(name, email, password);
+                            password = this.dis.readLine();
+                            this.dos.writeUTF("Veuillez confirmer votre mot de passe :");
+                            confirmPassword = this.dis.readLine();
+                            Auth = register(name, email, password, confirmPassword);
                             break;
                         case "b":
+                            // Connexion
                             this.dos.writeUTF("Veuillez entrer votre email :");
                             email = this.dis.readLine();
                             this.dos.writeUTF("Veuillez entrer votre mot de passe :");
-                            password = this.dis.readLine(); ;
+                            password = this.dis.readLine();
                             Auth = login(email, password);
                             break;
                         default:
@@ -84,9 +98,7 @@ public class ClientHandler extends Thread {
                 } while (!Auth);
 
                 if (Auth) {
-
-                    receiveAndDeleteMessages();
-                    // receiveAndDeleteMessages();
+                    // Une fois authentifié, afficher le menu utilisateur
                     userMenu();
                 }
             }
@@ -105,6 +117,11 @@ public class ClientHandler extends Thread {
         }
     }
 
+    /**
+     * Affiche le menu principal (inscription et connexion).
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
     private void showMenu() throws IOException {
         this.dos.writeUTF("\n====== Menu Principal ======\n");
         this.dos.writeUTF("a. S'inscrire\n");
@@ -113,81 +130,13 @@ public class ClientHandler extends Thread {
         this.dos.writeUTF("Veuillez entrer votre choix :");
     }
 
-    private void userMenu() throws IOException {
-        String choice;
-        do {
-            this.dos.writeUTF("\n====== Menu Utilisateur ======\n");
-            this.dos.writeUTF("a. Envoyer un message\n");
-            this.dos.writeUTF("b. Envoyer un fichier\n");
-            this.dos.writeUTF("c. Créer un groupe\n");
-            this.dos.writeUTF("d. Rejoindre un groupe\n");
-            this.dos.writeUTF("e. Mettre à jour le profil\n"); // Nouvelle option
-            this.dos.writeUTF("f. Se déconnecter\n");
-            this.dos.writeUTF("==============================\n");
-            this.dos.writeUTF("Veuillez entrer votre choix :");
-
-            choice = this.dis.readLine();
-            switch (choice) {
-                case "a":
-                    sendUserMessage();
-                    break;
-                case "b":
-                    sendUserFile();
-                    break;
-                case "c":
-                    createGroup();
-                    break;
-                case "d":
-                    joinGroup();
-                    break;
-                case "e": // Nouveau cas pour la mise à jour du profil
-                    updateProfile();
-                    break;
-                case "f":
-                    logout();
-                    showMenu();
-                    break;
-                default:
-                    this.dos.writeUTF("Choix invalide, veuillez réessayer");
-            }
-        } while (Auth);
-    }
-
-    private void createGroup() throws IOException {
-        this.dos.writeUTF("Entrez le nom du groupe :");
-        String name = this.dis.readLine();
-        this.dos.writeUTF("Entrez la description du groupe :");
-        String description = this.dis.readLine();
-
-        if (groupDAO.createGroup(name, description, userAccount.getId())) {
-            this.dos.writeUTF("Groupe créé avec succès.");
-        } else {
-            this.dos.writeUTF("Échec de la création du groupe.");
-        }
-    }
-
-    private void joinGroup() throws IOException {
-        this.dos.writeUTF("Entrez l'ID du groupe :");
-        int groupId = Integer.parseInt(this.dis.readLine());
-
-        Group group = groupDAO.getGroupById(groupId);
-        if (group != null) {
-            // Ajouter l'utilisateur au groupe dans la base de données
-            boolean added = groupDAO.addUserToGroup(userAccount.getId(), groupId);
-            if (added) {
-                // Ajouter le groupe à la liste des groupes de l'utilisateur en mémoire
-                userAccount.addGroup(group);
-                this.dos.writeUTF("Vous avez rejoint le groupe " + group.getName());
-            } else {
-                this.dos.writeUTF("Erreur lors de l'ajout au groupe.");
-            }
-        } else {
-            this.dos.writeUTF("Groupe introuvable.");
-        }
-    }
-
-
-
+    /**
+     * Méthode de connexion. Valide l'email et le mot de passe de l'utilisateur.
+     *
+     * @param email L'email de l'utilisateur.
+     * @param password Le mot de passe de l'utilisateur.
+     * @return true si la connexion réussit, false sinon.
+     */
     private boolean login(String email, String password) {
         try {
             ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
@@ -204,15 +153,34 @@ public class ClientHandler extends Thread {
         }
     }
 
-    private boolean register(String name, String email, String password) {
+    /**
+     * Méthode d'inscription. Vérifie si l'utilisateur existe déjà et enregistre un nouvel utilisateur.
+     *
+     * @param name Le nom de l'utilisateur.
+     * @param email L'email de l'utilisateur.
+     * @param password Le mot de passe de l'utilisateur.
+     * @param confirmPassword La confirmation du mot de passe.
+     * @return true si l'inscription réussit, false sinon.
+     */
+    private boolean register(String name, String email, String password, String confirmPassword) {
         try {
             if (userDAO.userExists(email)) {
                 dos.writeUTF("Email déjà utilisé");
                 return false;
             } else {
-                if (userDAO.insertUser(name, email, password)) {
-                    dos.writeUTF("Inscription réussie");
-                    return true;
+                if (userDAO.insertUser(name, email, password, confirmPassword)) {
+                    // Récupérer le nouvel utilisateur créé
+                    ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
+                    if (rs.next()) {
+                        userAccount = new User(
+                                rs.getInt("user_id"),
+                                rs.getString("name"),
+                                rs.getString("email"),
+                                rs.getString("password")
+                        );
+                        dos.writeUTF("Inscription réussie");
+                        return true;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -221,104 +189,168 @@ public class ClientHandler extends Thread {
         return false;
     }
 
-    private void sendUserMessage() throws IOException {
-        this.dos.writeUTF("Entrez l'email du destinataire :");
-        String recipient = this.dis.readLine();
-        this.dos.writeUTF("Entrez votre message :");
-        String message = this.dis.readLine();
+    /**
+     * Affiche le menu utilisateur une fois l'utilisateur connecté.
+     * Gère les actions possibles : ajout, suppression, mise à jour et liste des contacts.
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
+    private void userMenu() throws IOException {
+        String choice;
+        do {
+            dos.writeUTF("\n====== Menu Utilisateur ======\n");
+            dos.writeUTF("c. Ajouter un contact\n");
+            dos.writeUTF("d. Supprimer un contact\n");
+            dos.writeUTF("e. Modifier le surnom\n");
+            dos.writeUTF("f. Lister les contacts\n");
+            dos.writeUTF("g. Se déconnecter\n");
+            dos.writeUTF("==============================\n");
+            dos.writeUTF("Veuillez entrer votre choix :");
 
-        boolean sent = userAccount.sendMessage(recipient, message);
-        if (sent) {
-            this.dos.writeUTF("Message envoyé avec succès.");
-        } else {
-            this.dos.writeUTF("Échec de l'envoi du message.");
-        }
-    }
-
-    private void receiveAndDeleteMessages() {
-        try {
-            var messages = messageDAO.getMessagesForUser(userAccount.getEmail());
-            if (messages.isEmpty()) {
-                dos.writeUTF("Aucun nouveau message.");
-            } else {
-                for (var msg : messages) {
-                    dos.writeUTF("De " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
-                }
-                messageDAO.deleteMessagesForUser(userAccount.getEmail());
+            choice = dis.readLine();
+            switch (choice) {
+                case "c":
+                    handleAddContact();
+                    break;
+                case "d":
+                    handleDeleteContact();
+                    break;
+                case "e":
+                    handleUpdateNickname();
+                    break;
+                case "f":
+                    handleListContacts();
+                    break;
+                case "g":
+                    logout();
+                    break;
+                default:
+                    dos.writeUTF("Choix invalide, veuillez réessayer");
             }
-        } catch (IOException e) {
-            System.err.println("Erreur lors de la réception ou de la suppression des messages : " + e.getMessage());
-            e.printStackTrace();
+        } while (!choice.equals("g"));
+    }
+
+    /**
+     * Gère l'ajout d'un contact.
+     * Demande à l'utilisateur l'email du contact et un surnom optionnel, puis ajoute le contact à la base de données.
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
+    private void handleAddContact() throws IOException {
+        dos.writeUTF("Entrez l'email du contact :");
+        String email = dis.readLine();
+
+        // Vérifier si l'utilisateur existe
+        int contactUserId = userDAO.getUserIdByEmail(email);
+        if (contactUserId == -1) {
+            dos.writeUTF("Utilisateur introuvable !");
+            return;
         }
+
+        dos.writeUTF("Entrez un surnom (optionnel) :");
+        String nickname = dis.readLine();
+
+        boolean success = contactDAO.addContact(userAccount.getId(), contactUserId, nickname);
+        dos.writeUTF(success ? "Contact ajouté !" : "Échec de l'ajout");
     }
 
-    private void sendUserFile() throws IOException {
-        this.dos.writeUTF("Entrez l'email du destinataire :");
-        String recipient = this.dis.readLine();
-        this.dos.writeUTF("Entrez le chemin complet du fichier :");
-        String filePath = this.dis.readLine();
+    /**
+     * Gère la suppression d'un contact.
+     * Demande à l'utilisateur l'email du contact à supprimer et le supprime de la base de données.
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
+    private void handleDeleteContact() throws IOException {
+        dos.writeUTF("Entrez l'email du contact à supprimer :");
+        String email = dis.readLine();
 
-        try {
-            byte[] fileData = Files.readAllBytes(Paths.get(filePath));
-            String fileName = Paths.get(filePath).getFileName().toString();
-
-            boolean sent = userAccount.sendFile(recipient, fileName, fileData);
-            if (sent) {
-                this.dos.writeUTF("Fichier envoyé avec succès.");
-            } else {
-                this.dos.writeUTF("Échec de l'envoi du fichier.");
-            }
-        } catch (IOException e) {
-            this.dos.writeUTF("Erreur lors de la lecture du fichier : " + e.getMessage());
-            e.printStackTrace();
+        int contactUserId = userDAO.getUserIdByEmail(email);
+        if (contactUserId == -1) {
+            dos.writeUTF("Aucun utilisateur trouvé avec cet email");
+            return;
         }
+
+        boolean success = contactDAO.deleteContact(userAccount.getId(), contactUserId);
+        dos.writeUTF(success ? "Contact supprime avec succes" : " Erreur lors de la suppression");
     }
 
+    /**
+     * Gère la mise à jour du surnom d'un contact.
+     * Demande à l'utilisateur l'email du contact et le nouveau surnom.
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
+    private void handleUpdateNickname() throws IOException {
+        dos.writeUTF("Entrez l'email du contact :");
+        String email = dis.readLine();
 
-
-    private void updateProfile() throws IOException {
-        this.dos.writeUTF("Entrez votre nouveau nom :");
-        String newName = this.dis.readLine();
-        this.dos.writeUTF("Entrez votre nouvel email :");
-        String newEmail = this.dis.readLine();
-        this.dos.writeUTF("Entrez votre nouveau mot de passe :");
-        String newPassword = this.dis.readLine();
-
-        // Mettre à jour le profil de l'utilisateur
-        userAccount.updateProfile(newEmail, newPassword, newName);
-
-        this.dos.writeUTF("Profil mis à jour avec succès !");
-    }
-
-    private void logout() {
-        try {
-            dos.writeUTF("Déconnexion en cours...");
-            Auth = false;
-            if (userAccount != null) {
-                userAccount.disconnect();
-            }
-            dis.close();
-            dos.close();
-            commthread.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        int contactUserId = userDAO.getUserIdByEmail(email);
+        if (contactUserId == -1) {
+            dos.writeUTF("Contact introuvable");
+            return;
         }
+
+        dos.writeUTF("Entrez le nouveau surnom :");
+        String newNickname = dis.readLine();
+
+        boolean success = contactDAO.updateNickname(userAccount.getId(), contactUserId, newNickname);
+        dos.writeUTF(success ? "Surnom mis à jour" : "Echec de la mise à jour");
     }
 
+    /**
+     * Affiche la liste des contacts de l'utilisateur.
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
+    private void handleListContacts() throws IOException {
+        List<Contact> contacts = contactDAO.getContacts(userAccount.getId());
+        if (contacts.isEmpty()) {
+            dos.writeUTF("📭 Aucun contact trouvé");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder("Liste des contacts :\n");
+        UserDAO userDAO = new UserDAO();
+
+        for (Contact contact : contacts) {
+            String email = userDAO.getEmailById(contact.getContactUserId());
+            sb.append("➤ ").append(email)
+                    .append(contact.getNickname() != null ? " (" + contact.getNickname() + ")" : "")
+                    .append("\n");
+        }
+
+        dos.writeUTF(sb.toString());
+    }
+
+    /**
+     * Gère la déconnexion de l'utilisateur.
+     *
+     * @throws IOException Si une erreur de communication se produit.
+     */
+    private void logout() throws IOException {
+        dos.writeUTF("Déconnexion en cours...");
+        Auth = false;
+        if (userAccount != null) {
+            userAccount.disconnect();
+        }
+        dis.close();
+        dos.close();
+        commthread.close();
+    }
+
+    /**
+     * Gère les erreurs lors de la fermeture de la connexion.
+     */
     private void error() {
-        if (this.Auth && this.userAccount != null) {
-            this.userAccount.disconnect();
-        }
         try {
+            if (this.Auth && this.userAccount != null) {
+                this.userAccount.disconnect();
+            }
             this.dis.close();
             this.dos.close();
-        } catch (IOException e3) {
-            e3.printStackTrace();
-        }
-        try {
             this.commthread.close();
-        } catch (IOException e4) {
-            e4.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }
