@@ -212,4 +212,26 @@ public class UserDAO {
         updateName(userId, newName);
         updatePassword(userId, newPassword);
     }
+
+    public boolean isUserOnline(int userId) {
+        String sql = "SELECT is_online FROM users WHERE user_id = ?";
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            ResultSet rs = pstmt.executeQuery();
+            return rs.next() && rs.getBoolean("is_online");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+    public void setUserOnlineStatus(int userId, boolean isOnline) {
+        String sql = "UPDATE users SET is_online = ? WHERE user_id = ?";
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setBoolean(1, isOnline);
+            pstmt.setInt(2, userId);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
 }

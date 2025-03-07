@@ -208,4 +208,6 @@ public class User {
         updatePassword(newPassword);
         System.out.println("Profil mis à jour avec succès !");
     }
+
+
 }

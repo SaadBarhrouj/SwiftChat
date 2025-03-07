@@ -3,19 +3,23 @@ package Server;
 import Dao.ContactDAO;
 import Dao.MessageDAO;
 import Entities.Contact;
+import Entities.Message;
 import Entities.User;
 import Dao.UserDAO;
 import Dao.GroupDAO;
 import Dao.DatabaseConnection;
 import Entities.Group;
 
+import javax.sound.sampled.*;
 import java.io.*;
 import java.net.Socket;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * La classe ClientHandler gère la communication avec un client connecté au serveur.
@@ -33,7 +37,7 @@ public class ClientHandler extends Thread {
     private GroupDAO groupDAO;
     private Connection conn;
     private Statement stmt;
-
+    private static Map<String, DataOutputStream> mapDos = new HashMap<>();
     /**
      * Constructeur de la classe ClientHandler.
      *
@@ -73,6 +77,7 @@ public class ClientHandler extends Thread {
             while (true) {
                 authenticateUser();
                 if (Auth) {
+                    receiveAndDeleteMessages();
                     userMenu();
                 }
             }
@@ -126,6 +131,7 @@ public class ClientHandler extends Thread {
         this.dos.writeUTF("Veuillez entrer votre choix :");
     }
 
+
     /**
      * Méthode pour gérer la connexion d'un utilisateur.
      * Vérifie si l'email et le mot de passe ne sont pas vides avant de procéder à la connexion.
@@ -136,16 +142,19 @@ public class ClientHandler extends Thread {
      */
     private boolean login(String email, String password) {
         try {
-            // Vérification des champs vides
-            if (email.isEmpty() || password.isEmpty()) {
-                dos.writeUTF("L'email et le mot de passe ne peuvent pas être vides.");
-                return false;
-            }
-
+            // Vérification des informations de connexion
             ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
             if (rs.next()) {
                 dos.writeUTF("Connexion réussie");
                 userAccount = new User(rs.getInt("user_id"), rs.getString("name"), rs.getString("email"), rs.getString("password"));
+                userDAO.setUserOnlineStatus(userAccount.getId(), true);
+
+                // Ajouter l'utilisateur à la Map
+                mapDos.put(email, dos);
+
+                // Afficher les messages en attente
+                receiveAndDeleteMessages();
+
                 return true;
             }
             dos.writeUTF("Échec de la connexion");
@@ -155,6 +164,7 @@ public class ClientHandler extends Thread {
             return false;
         }
     }
+
 
     /**
      * Méthode pour gérer l'inscription d'un utilisateur.
@@ -202,6 +212,7 @@ public class ClientHandler extends Thread {
                 if (rs.next()) {
                     userAccount = new User(rs.getInt("user_id"), rs.getString("name"), rs.getString("email"), rs.getString("password"));
                     dos.writeUTF("Inscription réussie");
+                    userDAO.setUserOnlineStatus(userAccount.getId(), true); // Mettre à jour le statut en ligne
                     return true;
                 }
             }
@@ -320,8 +331,7 @@ public class ClientHandler extends Thread {
                     sendUserMessage();
                     break;
                 case "b":
-                    receiveAndDeleteMessages();
-                    break;
+                    displayConversation();                    break;
                 case "c":
                     break; // Retour au menu principal
                 default:
@@ -354,6 +364,25 @@ public class ClientHandler extends Thread {
                     dos.writeUTF("Choix invalide, veuillez réessayer");
             }
         } while (!choice.equals("c"));
+    }
+
+    private void displayConversation() throws IOException {
+        dos.writeUTF("Entrez l'email de l'utilisateur avec qui vous souhaitez voir la conversation :");
+        String email = dis.readLine();
+        int contactUserId = userDAO.getUserIdByEmail(email);
+        if (contactUserId == -1) {
+            dos.writeUTF("Utilisateur introuvable !");
+            return;
+        }
+
+        List<Message> messages = messageDAO.getConversation(userAccount.getId(), contactUserId);
+        if (messages.isEmpty()) {
+            dos.writeUTF("Aucun message trouvé.");
+        } else {
+            for (Message msg : messages) {
+                dos.writeUTF("De " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
+            }
+        }
     }
 
     private void handleAddContact() throws IOException {
@@ -412,24 +441,48 @@ public class ClientHandler extends Thread {
         dos.writeUTF(sb.toString());
     }
 
+
+
+    public class SoundPlayer {
+        public static void playSound(String soundFilePath) {
+            try {
+                // Charger le fichier audio
+                File soundFile = new File(soundFilePath);
+                AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(soundFile);
+
+                // Obtenir un Clip pour jouer le son
+                Clip clip = AudioSystem.getClip();
+                clip.open(audioInputStream);
+
+                // Jouer le son
+                clip.start();
+            } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+
+
     private void sendUserMessage() throws IOException {
+        // 1. Demander l'email du destinataire
         this.dos.writeUTF("Entrez l'email du destinataire :");
         String recipient = this.dis.readLine();
 
-        // Récupérer l'ID de l'utilisateur destinataire
+        // 2. Vérifier si le destinataire existe
         int recipientUserId = userDAO.getUserIdByEmail(recipient);
         if (recipientUserId == -1) {
             this.dos.writeUTF("Utilisateur introuvable !");
             return;
         }
 
-        // Vérifier si le destinataire est un contact
+        // 3. Vérifier si le destinataire est un contact
         if (!contactDAO.areContacts(userAccount.getId(), recipientUserId)) {
             this.dos.writeUTF("Le destinataire n'est pas dans votre liste de contacts.");
             this.dos.writeUTF("Souhaitez-vous ajouter ce contact ? (oui/non)");
             String response = this.dis.readLine();
             if (response.equalsIgnoreCase("oui")) {
-                contactMenu(); // Rediriger vers le menu des contacts
+                handleAddContact(); // Rediriger vers la méthode d'ajout de contact
                 return; // Retourner à l'appelant après la gestion des contacts
             } else {
                 this.dos.writeUTF("Retour au menu principal.");
@@ -437,27 +490,46 @@ public class ClientHandler extends Thread {
             }
         }
 
+        // 4. Demander le message à envoyer
         this.dos.writeUTF("Entrez votre message :");
         String message = this.dis.readLine();
 
-        boolean sent = userAccount.sendMessage(recipient, message);
-        if (sent) {
-            this.dos.writeUTF("Message envoyé avec succès.");
+        // 5. Vérifier si le destinataire est en ligne
+        if (mapDos.containsKey(recipient)) {
+            // Envoyer le message en temps réel
+            DataOutputStream recipientDos = mapDos.get(recipient);
+            try {
+                recipientDos.writeUTF("Nouveau message de " + userAccount.getEmail() + " : " + message);
+                this.dos.writeUTF("Message envoyé avec succès.");
+
+                // Jouer un son pour le destinataire
+                SoundPlayer.playSound("C:\\Users\\Lenovo\\IdeaProjects\\ChatApplication\\src\\utils\\notif.wav"); // Chemin relatif
+            } catch (IOException e) {
+                e.printStackTrace();
+                this.dos.writeUTF("Échec de l'envoi du message.");
+            }
         } else {
-            this.dos.writeUTF("Échec de l'envoi du message.");
+            // Stocker le message en attente
+            boolean stored = messageDAO.storePendingMessage(userAccount.getId(), recipientUserId, message);
+            if (stored) {
+                this.dos.writeUTF("Le destinataire est déconnecté. Le message sera délivré à sa reconnexion.");
+            } else {
+                this.dos.writeUTF("Échec de l'enregistrement du message en attente.");
+            }
         }
     }
 
+
     private void receiveAndDeleteMessages() {
         try {
-            var messages = messageDAO.getMessagesForUser(userAccount.getEmail());
+            var messages = messageDAO.getPendingMessagesForUser(userAccount.getId());
             if (messages.isEmpty()) {
                 dos.writeUTF("Aucun nouveau message.");
             } else {
                 for (var msg : messages) {
                     dos.writeUTF("De " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
                 }
-                messageDAO.deleteMessagesForUser(userAccount.getEmail());
+                messageDAO.deletePendingMessagesForUser(userAccount.getId());
             }
         } catch (IOException e) {
             System.err.println("Erreur lors de la réception ou de la suppression des messages : " + e.getMessage());
@@ -506,12 +578,15 @@ public class ClientHandler extends Thread {
     }
 
 
+
+
     private void logout() {
         try {
             dos.writeUTF("Déconnexion en cours...");
             Auth = false;
             if (userAccount != null) {
-                userAccount.disconnect();
+                mapDos.remove(userAccount.getEmail()); // Retirer l'utilisateur de la Map
+                userDAO.setUserOnlineStatus(userAccount.getId(), false);
             }
             dis.close();
             dos.close();
