@@ -1,5 +1,6 @@
 
 -- Table des utilisateurs (déjà existante, à compléter)
+
 CREATE TABLE users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -12,6 +13,7 @@ CREATE TABLE users (
 );
 
 -- Table des contacts
+
 CREATE TABLE contacts (
     contact_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -42,6 +44,7 @@ CREATE TABLE conversation_participants (
 );
 
 -- Table des groupes
+
 CREATE TABLE groups (
     group_id INT AUTO_INCREMENT PRIMARY KEY,
     conversation_id INT NOT NULL UNIQUE,
@@ -55,6 +58,7 @@ CREATE TABLE groups (
 );
 
 -- Table des messages (modifiée pour utiliser conversation_id)
+
 CREATE TABLE messages (
     message_id INT AUTO_INCREMENT PRIMARY KEY,
     conversation_id INT NOT NULL,
@@ -69,6 +73,7 @@ CREATE TABLE messages (
 );
 
 -- Table pour le statut de lecture des messages
+
 CREATE TABLE message_status (
     status_id INT AUTO_INCREMENT PRIMARY KEY,
     message_id INT NOT NULL,

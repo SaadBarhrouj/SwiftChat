@@ -16,6 +16,11 @@ import Dao.MessageDAO;
 import Dao.UserDAO;
 import Dao.GroupDAO;
 
+/**
+ * Classe User représentant un utilisateur dans le système de chat.
+ * Cette classe gère les informations de l'utilisateur, sa connexion à la base de données
+ * et les flux de communication avec d'autres utilisateurs.
+ */
 public class User {
     private int id;
     private String name;
@@ -33,6 +38,15 @@ public class User {
     private static ArrayList<Group> allGroups = new ArrayList<>(); // Tous les groupes disponibles
     private ArrayList<Group> myGroups = new ArrayList<>(); // Groupes auxquels l'utilisateur appartient
 
+    /**
+     * Constructeur de la classe User.
+     * Initialise un utilisateur avec les informations de base et établit une connexion à la base de données.
+     *
+     * @param id       Identifiant unique de l'utilisateur
+     * @param name     Nom de l'utilisateur
+     * @param email    Adresse email de l'utilisateur
+     * @param password Mot de passe de l'utilisateur
+     */
     public User(int id, String name, String email, String password) {
         this.id = id;
         this.name = name;
@@ -44,6 +58,13 @@ public class User {
         this.groupDAO = new GroupDAO(); // Initialisation de GroupDAO
     }
 
+    /**
+     * Envoie un message à un destinataire.
+     *
+     * @param target L'email du destinataire
+     * @param msg    Le message à envoyer
+     * @return true si le message a été envoyé avec succès, false sinon
+     */
     public boolean sendMessage(String target, String msg) {
         System.out.println(this.getEmail() + " envoie un message à " + target);
 
@@ -71,6 +92,14 @@ public class User {
         }
     }
 
+    /**
+     * Envoie un fichier à un destinataire.
+     *
+     * @param target    L'email du destinataire
+     * @param fileName  Le nom du fichier
+     * @param fileData  Les données du fichier
+     * @return true si le fichier a été envoyé avec succès, false sinon
+     */
     public boolean sendFile(String target, String fileName, byte[] fileData) {
         System.out.println(this.getEmail() + " envoie un fichier à " + target);
 
@@ -101,23 +130,40 @@ public class User {
         }
     }
 
+    /**
+     * Déconnecte l'utilisateur et le retire de la liste des utilisateurs en ligne.
+     */
     public void disconnect() {
         mapDos.remove(this.email); // Retirer l'utilisateur de la liste des utilisateurs en ligne
         System.out.println(this.getEmail() + " déconnecté");
     }
 
+    /**
+     * Ajoute un groupe auquel l'utilisateur appartient.
+     *
+     * @param group Le groupe à ajouter
+     */
     public void addGroup(Group group) {
         myGroups.add(group);
     }
 
+    /**
+     * Retourne l'ID de l'utilisateur.
+     *
+     * @return Identifiant de l'utilisateur
+     */
     public int getId() {
         return id;
     }
 
+    /**
+     * Retourne l'adresse email de l'utilisateur.
+     *
+     * @return Email de l'utilisateur
+     */
     public String getEmail() {
         return email;
     }
-
 
     /**
      * Met à jour le nom de l'utilisateur.
@@ -162,5 +208,4 @@ public class User {
         updatePassword(newPassword);
         System.out.println("Profil mis à jour avec succès !");
     }
-
 }

@@ -34,10 +34,10 @@ public class GroupDAO {
         try (PreparedStatement pstmtGroup = conn.prepareStatement(sqlGroup, Statement.RETURN_GENERATED_KEYS);
              PreparedStatement pstmtUserGroup = conn.prepareStatement(sqlUserGroup)) {
 
-            // Désactiver l'auto-commit pour gérer la transaction manuellement
+
             conn.setAutoCommit(false);
 
-            // Insérer le groupe dans la table Groupe
+
             pstmtGroup.setString(1, name);
             pstmtGroup.setString(2, description);
             pstmtGroup.setInt(3, adminId);
@@ -47,7 +47,7 @@ public class GroupDAO {
                 throw new SQLException("La création du groupe a échoué, aucune ligne affectée.");
             }
 
-            // Récupérer l'ID du groupe généré
+
             int groupId;
             try (ResultSet generatedKeys = pstmtGroup.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
@@ -57,17 +57,15 @@ public class GroupDAO {
                 }
             }
 
-            // Ajouter l'admin au groupe dans la table users_groups
             pstmtUserGroup.setInt(1, adminId);
             pstmtUserGroup.setInt(2, groupId);
             pstmtUserGroup.executeUpdate();
 
-            // Valider la transaction
+
             conn.commit();
             return true;
 
         } catch (SQLException e) {
-            // En cas d'erreur, annuler la transaction
             try {
                 conn.rollback();
             } catch (SQLException ex) {
@@ -76,7 +74,6 @@ public class GroupDAO {
             e.printStackTrace();
             return false;
         } finally {
-            // Réactiver l'auto-commit
             try {
                 conn.setAutoCommit(true);
             } catch (SQLException e) {
@@ -86,13 +83,13 @@ public class GroupDAO {
     }
 
     public Group getGroupById(int groupId) {
-        String sql = "SELECT * FROM groupe WHERE Groupe_id = ?"; // Utilisez "Groupe_id" au lieu de "group_id"
+        String sql = "SELECT * FROM groupe WHERE Groupe_id = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, groupId);
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 return new Group(
-                        rs.getInt("Groupe_id"), // Utilisez "Groupe_id"
+                        rs.getInt("Groupe_id"),
                         rs.getString("Groupe_name"),
                         rs.getString("Groupe_description"),
                         rs.getInt("Groupe_admin_id")
