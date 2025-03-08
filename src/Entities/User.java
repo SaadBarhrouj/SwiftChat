@@ -65,7 +65,7 @@ public class User {
      * @param msg    Le message à envoyer
      * @return true si le message a été envoyé avec succès, false sinon
      */
-    public boolean sendMessage(String target, String msg) {
+   /* public boolean sendMessage(String target, String msg) {
         System.out.println(this.getEmail() + " envoie un message à " + target);
 
         // Vérifier si le destinataire est en ligne
@@ -90,7 +90,7 @@ public class User {
             e.printStackTrace();
             return false;
         }
-    }
+    }*/
 
     /**
      * Envoie un fichier à un destinataire.
@@ -100,7 +100,7 @@ public class User {
      * @param fileData  Les données du fichier
      * @return true si le fichier a été envoyé avec succès, false sinon
      */
-    public boolean sendFile(String target, String fileName, byte[] fileData) {
+   /* public boolean sendFile(String target, String fileName, byte[] fileData) {
         System.out.println(this.getEmail() + " envoie un fichier à " + target);
 
         // Vérifier si le destinataire est en ligne
@@ -128,7 +128,7 @@ public class User {
             e.printStackTrace();
             return false;
         }
-    }
+    }*/
 
     /**
      * Déconnecte l'utilisateur et le retire de la liste des utilisateurs en ligne.

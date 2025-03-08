@@ -63,6 +63,20 @@ public class ContactDAO {
         return false;
     }
 
+
+    public int getUserIdByNickname(int userId, String nickname) {
+        String sql = "SELECT contact_user_id FROM contacts WHERE user_id = ? AND nickname = ?";
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            pstmt.setString(2, nickname);
+            ResultSet rs = pstmt.executeQuery();
+            return rs.next() ? rs.getInt("contact_user_id") : -1;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return -1;
+        }
+    }
+
     /**
      * Met à jour le surnom d'un contact d'un utilisateur.
      *
