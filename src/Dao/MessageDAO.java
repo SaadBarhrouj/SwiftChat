@@ -38,7 +38,24 @@ public class MessageDAO {
         }
         return -1; // Retourne -1 en cas d'échec
     }
-
+    public int insertFileMessage(int senderId, int receiverId, String fileName) {
+        String sql = "INSERT INTO messages (sender_id, receiver_id, message, messageType, fileName, date) VALUES (?, ?, '', 'file', ?, NOW())";
+        try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, senderId);
+            ps.setInt(2, receiverId);
+            ps.setString(3, fileName);
+            ps.executeUpdate();
+    
+            // Récupérer l'ID du message inséré
+            ResultSet rs = ps.getGeneratedKeys();
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return -1; // Retourne -1 en cas d'échec
+    }
     /**
      * Stocker un message en attente dans la table `pending_messages`.
      *
