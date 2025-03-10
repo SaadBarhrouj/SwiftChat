@@ -135,5 +135,19 @@ public class GroupDAO {
         }
         return -1;
     }
+    public List<Integer> getGroupMembers(int groupId) {
+        List<Integer> memberIds = new ArrayList<>();
+        String query = "SELECT user_id FROM users_groups WHERE group_id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setInt(1, groupId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                memberIds.add(rs.getInt("user_id"));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return memberIds;
+    }
 
 }

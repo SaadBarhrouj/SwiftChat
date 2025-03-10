@@ -324,9 +324,10 @@ public class ClientHandler extends Thread {
             dos.writeUTF("a. Créer un groupe\n");
             dos.writeUTF("b. Rejoindre un groupe\n");
             dos.writeUTF("c. Ajouter un membre à un groupe\n");
-            dos.writeUTF("d. Supprimer un membre d'un groupe\n"); // Nouvelle option
+            dos.writeUTF("d. Supprimer un membre d'un groupe\n");
             dos.writeUTF("e. Afficher les groupes disponibles\n");
-            dos.writeUTF("f. Retour au menu principal\n");
+            dos.writeUTF("f. Envoyer un message à un groupe\n");
+            dos.writeUTF("g. Retour au menu principal\n");
             dos.writeUTF("==============================\n");
             dos.writeUTF("Veuillez entrer votre choix :");
     
@@ -348,11 +349,14 @@ public class ClientHandler extends Thread {
                     displayUserGroups();
                     break;
                 case "f":
+                    sendGroupMessage();
+                    break;
+                case "g":
                     break;
                 default:
                     dos.writeUTF("Choix invalide, veuillez réessayer");
             }
-        } while (!choice.equals("f"));
+        } while (!choice.equals("g"));
     }
     private void removeMemberFromGroup() throws IOException {
         dos.writeUTF("Entrez le nom du groupe :");
@@ -559,7 +563,49 @@ public class ClientHandler extends Thread {
             }
         }
     }
-
+    private void sendGroupMessage() throws IOException {
+        dos.writeUTF("Entrez le nom du groupe :");
+        String groupName = dis.readLine();
+        int groupId = groupDAO.getGroupIdByName(groupName);
+        if (groupId == -1) {
+            dos.writeUTF("Groupe introuvable !");
+            return;
+        }
+    
+        dos.writeUTF("Entrez votre message :");
+        String message = dis.readLine();
+    
+        // Insérer le message dans la table `messages`
+        int messageId = messageDAO.insertGroupMessage(userAccount.getId(), groupId, message);
+        if (messageId == -1) {
+            dos.writeUTF("Erreur : Impossible d'enregistrer le message.");
+            return;
+        }
+    
+        // Récupérer les membres du groupe
+        List<Integer> memberIds = groupDAO.getGroupMembers(groupId);
+        for (int memberId : memberIds) {
+            String recipientEmail = userDAO.getEmailById(memberId);
+            if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
+                DataOutputStream recipientDos = mapDos.get(recipientEmail);
+                try {
+                    recipientDos.writeUTF("Nouveau message dans le groupe " + groupName + " de " + userAccount.getEmail() + " : " + message);
+                    SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                // Stocker le message en attente si le membre est hors ligne
+                boolean pendingStored = messageDAO.storePendingMessage(memberId, messageId);
+                if (pendingStored) {
+                    dos.writeUTF("Le message sera délivré à la reconnexion des membres hors ligne.");
+                } else {
+                    dos.writeUTF("Échec de l'enregistrement du message en attente.");
+                }
+            }
+        }
+        dos.writeUTF("Message envoyé au groupe avec succès.");
+    }
     private void handleAddContact() throws IOException {
         dos.writeUTF("Entrez l'email du contact :");
         String email = dis.readLine();
