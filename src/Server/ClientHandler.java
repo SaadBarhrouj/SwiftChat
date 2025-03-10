@@ -323,10 +323,13 @@ public class ClientHandler extends Thread {
             dos.writeUTF("\n====== Menu Groupes ======\n");
             dos.writeUTF("a. Créer un groupe\n");
             dos.writeUTF("b. Rejoindre un groupe\n");
-            dos.writeUTF("c. Retour au menu principal\n");
+            dos.writeUTF("c. Ajouter un membre à un groupe\n");
+            dos.writeUTF("d. Supprimer un membre d'un groupe\n"); // Nouvelle option
+            dos.writeUTF("e. Afficher les groupes disponibles\n");
+            dos.writeUTF("f. Retour au menu principal\n");
             dos.writeUTF("==============================\n");
             dos.writeUTF("Veuillez entrer votre choix :");
-
+    
             choice = dis.readLine();
             switch (choice) {
                 case "a":
@@ -336,12 +339,122 @@ public class ClientHandler extends Thread {
                     joinGroup();
                     break;
                 case "c":
+                    addMemberToGroup();
+                    break;
+                case "d":
+                    removeMemberFromGroup();
+                    break;
+                case "e":
+                    displayUserGroups();
+                    break;
+                case "f":
                     break;
                 default:
                     dos.writeUTF("Choix invalide, veuillez réessayer");
             }
-        } while (!choice.equals("c"));
+        } while (!choice.equals("f"));
     }
+    private void removeMemberFromGroup() throws IOException {
+        dos.writeUTF("Entrez le nom du groupe :");
+        String groupName = dis.readLine();
+        int groupId = groupDAO.getGroupIdByName(groupName);
+        if (groupId == -1) {
+            dos.writeUTF("Groupe introuvable !");
+            return;
+        }
+    
+        // Vérifier si l'utilisateur est l'admin du groupe
+        if (!groupDAO.isGroupAdmin(userAccount.getId(), groupId)) {
+            dos.writeUTF("Vous n'êtes pas l'administrateur de ce groupe.");
+            return;
+        }
+    
+        dos.writeUTF("Entrez l'email de l'utilisateur à supprimer :");
+        String email = dis.readLine();
+        int userId = userDAO.getUserIdByEmail(email);
+        if (userId == -1) {
+            dos.writeUTF("Utilisateur introuvable !");
+            return;
+        }
+    
+        boolean success = groupDAO.removeUserFromGroup(userId, groupId);
+        dos.writeUTF(success ? "Utilisateur supprimé du groupe avec succès." : "Échec de la suppression de l'utilisateur du groupe.");
+    
+        // Notify the user if they are online
+        String recipientEmail = userDAO.getEmailById(userId);
+        if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
+            DataOutputStream recipientDos = mapDos.get(recipientEmail);
+            try {
+                recipientDos.writeUTF("Vous avez été supprimé du groupe " + groupName + " par l'administrateur.");
+                SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    private void displayUserGroups() throws IOException {
+        List<Group> groups = groupDAO.getGroupsForUser(userAccount.getId());
+        if (groups.isEmpty()) {
+            dos.writeUTF("Vous n'êtes membre d'aucun groupe.");
+        } else {
+            dos.writeUTF("Groupes dont vous êtes membre :");
+            for (Group group : groups) {
+                dos.writeUTF("Nom : " + group.getName() + ", Description : " + group.getDescription());
+            }
+        }
+    }
+    
+    private void addMemberToGroup() throws IOException {
+        dos.writeUTF("Entrez le nom du groupe :");
+        String groupName = dis.readLine();
+        int groupId = groupDAO.getGroupIdByName(groupName);
+        if (groupId == -1) {
+            dos.writeUTF("Groupe introuvable !");
+            return;
+        }
+    
+        // Vérifier si l'utilisateur est l'admin du groupe
+        if (!groupDAO.isGroupAdmin(userAccount.getId(), groupId)) {
+            dos.writeUTF("Vous n'êtes pas l'administrateur de ce groupe.");
+            return;
+        }
+    
+        dos.writeUTF("Entrez l'email de l'utilisateur à ajouter :");
+        String email = dis.readLine();
+        int userId = userDAO.getUserIdByEmail(email);
+        if (userId == -1) {
+            dos.writeUTF("Utilisateur introuvable !");
+            return;
+        }
+    
+        boolean success = groupDAO.addUserToGroup(userId, groupId);
+        dos.writeUTF(success ? "Utilisateur ajouté au groupe avec succès." : "Échec de l'ajout de l'utilisateur au groupe.");
+    
+        // Notify the user if they are online
+        String recipientEmail = userDAO.getEmailById(userId);
+        if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
+            DataOutputStream recipientDos = mapDos.get(recipientEmail);
+            try {
+                recipientDos.writeUTF("Vous avez été ajouté au groupe " + groupName + " par l'administrateur.");
+                SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    private void joinGroup() throws IOException {
+        dos.writeUTF("Entrez le nom du groupe :");
+        String groupName = dis.readLine();
+        int groupId = groupDAO.getGroupIdByName(groupName);
+        if (groupId == -1) {
+            dos.writeUTF("Groupe introuvable !");
+            return;
+        }
+    
+        boolean success = groupDAO.addUserToGroup(userAccount.getId(), groupId);
+        dos.writeUTF(success ? "Vous avez rejoint le groupe avec succès." : "Échec de la jonction au groupe.");
+    }
+   
     private void sendFile() throws IOException {
         // 1. Demander le surnom du destinataire
         this.dos.writeUTF("Entrez le surnom du destinataire :");
@@ -606,22 +719,7 @@ public class ClientHandler extends Thread {
         }
     }
 
-    private void joinGroup() throws IOException {
-        dos.writeUTF("Entrez l'ID du groupe :");
-        int groupId = Integer.parseInt(dis.readLine());
-        Group group = groupDAO.getGroupById(groupId);
-        if (group != null) {
-            boolean added = groupDAO.addUserToGroup(userAccount.getId(), groupId);
-            if (added) {
-                userAccount.addGroup(group);
-                dos.writeUTF("Vous avez rejoint le groupe " + group.getName());
-            } else {
-                dos.writeUTF("Erreur lors de l'ajout au groupe.");
-            }
-        } else {
-            dos.writeUTF("Groupe introuvable.");
-        }
-    }
+    
 
     private void updateProfile() throws IOException {
         dos.writeUTF("Entrez votre nouveau nom :");
