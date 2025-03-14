@@ -5,36 +5,19 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-/**
- * The UserDAO class provides database access methods for user-related operations.
- */
 public class UserDAO {
     private Connection conn;
 
-    /**
-     * Constructor to initialize database connection.
-     */
+
     public UserDAO() {
         this.conn = DatabaseConnection.getConnection();
     }
 
-    /**
-     * Validates the email format using a regex pattern.
-     *
-     * @param email The email to validate.
-     * @return True if the email is valid, false otherwise.
-     */
     private boolean isValidEmail(String email) {
         String emailRegex = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$";
         return email != null && email.matches(emailRegex);
     }
 
-    /**
-     * Checks if a user with the given email already exists in the database.
-     *
-     * @param email The email to check.
-     * @return True if the user exists, false otherwise.
-     */
     public boolean userExists(String email) {
         String sql = "SELECT * FROM users WHERE email = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -47,15 +30,6 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Inserts a new user into the database after validating the email and confirming the password.
-     *
-     * @param name             The user's name.
-     * @param email            The user's email.
-     * @param password         The user's password.
-     * @param confirmPassword   The confirmation password.
-     * @return True if the insertion was successful, false otherwise.
-     */
     public boolean insertUser(String name, String email, String password, String confirmPassword) {
         if (!isValidEmail(email)) {
             System.out.println("Invalid email format.");
@@ -84,13 +58,6 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Retrieves a user from the database by email and password.
-     *
-     * @param email    The user's email.
-     * @param password The user's password.
-     * @return A ResultSet containing the user's data if found, null otherwise.
-     */
     public ResultSet getUserByEmailAndPassword(String email, String password) {
         if (!isValidEmail(email)) {
             System.out.println("Invalid email format.");
@@ -109,12 +76,7 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Retrieves the user ID based on the provided email.
-     *
-     * @param email The user's email.
-     * @return The user ID if found, -1 otherwise.
-     */
+
     public int getUserIdByEmail(String email) {
         String sql = "SELECT user_id FROM users WHERE email = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -127,12 +89,6 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Retrieves the email of a user based on their user ID.
-     *
-     * @param userId The user's ID.
-     * @return The email associated with the user ID, or null if not found.
-     */
     public String getEmailById(int userId) {
         String sql = "SELECT email FROM users WHERE user_id = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -145,12 +101,7 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Met à jour le nom d'un utilisateur dans la base de données.
-     *
-     * @param userId  L'ID de l'utilisateur.
-     * @param newName Le nouveau nom.
-     */
+
     public void updateName(int userId, String newName) {
         try {
             String sql = "UPDATE users SET name = ? WHERE user_id = ?";
@@ -163,12 +114,6 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Met à jour l'email d'un utilisateur dans la base de données.
-     *
-     * @param userId   L'ID de l'utilisateur.
-     * @param newEmail Le nouvel email.
-     */
     public void updateEmail(int userId, String newEmail) {
         try {
             String sql = "UPDATE users SET email = ? WHERE user_id = ?";
@@ -181,12 +126,6 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Met à jour le mot de passe d'un utilisateur dans la base de données.
-     *
-     * @param userId      L'ID de l'utilisateur.
-     * @param newPassword Le nouveau mot de passe.
-     */
     public void updatePassword(int userId, String newPassword) {
         try {
             String sql = "UPDATE users SET password = ? WHERE user_id = ?";
@@ -199,14 +138,7 @@ public class UserDAO {
         }
     }
 
-    /**
-     * Met à jour le profil complet d'un utilisateur (nom, email, mot de passe).
-     *
-     * @param userId      L'ID de l'utilisateur.
-     * @param newEmail    Le nouvel email.
-     * @param newPassword Le nouveau mot de passe.
-     * @param newName     Le nouveau nom.
-     */
+
     public void updateProfile(int userId, String newEmail, String newPassword, String newName) {
         updateEmail(userId, newEmail);
         updateName(userId, newName);

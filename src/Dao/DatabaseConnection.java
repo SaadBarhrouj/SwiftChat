@@ -9,11 +9,6 @@ public class DatabaseConnection {
     private static final String USER = "root";
     private static final String PASSWORD = "";
 
-    /**
-     * Établit une connexion à la base de données.
-     *
-     * @return Une instance de Connection si la connexion réussit, sinon null.
-     */
     public static Connection getConnection() {
         Connection conn = null;
         try {

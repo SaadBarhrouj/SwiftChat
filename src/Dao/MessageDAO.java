@@ -12,14 +12,6 @@ public class MessageDAO {
         this.conn = DatabaseConnection.getConnection();
     }
 
-    /**
-     * Insérer un message dans la table `messages`.
-     *
-     * @param senderId   ID de l'expéditeur.
-     * @param receiverId ID du destinataire.
-     * @param message    Contenu du message.
-     * @return L'ID du message inséré, ou -1 en cas d'échec.
-     */
     public int insertMessage(int senderId, int receiverId, String message) {
         String sql = "INSERT INTO messages (sender_id, receiver_id, message, messageType, date) VALUES (?, ?, ?, 'text', NOW())";
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -28,7 +20,7 @@ public class MessageDAO {
             ps.setString(3, message);
             ps.executeUpdate();
 
-            // Récupérer l'ID du message inséré
+
             ResultSet rs = ps.getGeneratedKeys();
             if (rs.next()) {
                 return rs.getInt(1);
@@ -36,7 +28,7 @@ public class MessageDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return -1; // Retourne -1 en cas d'échec
+        return -1;
     }
     public int insertFileMessage(int senderId, int receiverId, String fileName) {
         String sql = "INSERT INTO messages (sender_id, receiver_id, message, messageType, fileName, date) VALUES (?, ?, '', 'file', ?, NOW())";
@@ -46,7 +38,7 @@ public class MessageDAO {
             ps.setString(3, fileName);
             ps.executeUpdate();
 
-            // Récupérer l'ID du message inséré
+
             ResultSet rs = ps.getGeneratedKeys();
             if (rs.next()) {
                 return rs.getInt(1);
@@ -54,15 +46,9 @@ public class MessageDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return -1; // Retourne -1 en cas d'échec
+        return -1;
     }
-    /**
-     * Stocker un message en attente dans la table `pending_messages`.
-     *
-     * @param userId    ID de l'utilisateur destinataire.
-     * @param messageId ID du message à stocker.
-     * @return true si l'insertion a réussi, sinon false.
-     */
+
     public boolean storePendingMessage(int userId, int messageId) {
         String sql = "INSERT INTO pending_messages (user_id, message_id) VALUES (?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -75,12 +61,7 @@ public class MessageDAO {
         return false;
     }
 
-    /**
-     * Récupérer les messages en attente pour un utilisateur.
-     *
-     * @param userId ID de l'utilisateur.
-     * @return Liste des messages en attente.
-     */
+
     public ArrayList<Message> getPendingMessagesForUser(int userId) {
         ArrayList<Message> messages = new ArrayList<>();
         String sql = "SELECT m.*, u.email AS senderEmail " +
@@ -108,11 +89,7 @@ public class MessageDAO {
         return messages;
     }
 
-    /**
-     * Supprimer les messages en attente pour un utilisateur.
-     *
-     * @param userId ID de l'utilisateur.
-     */
+
     public void deletePendingMessagesForUser(int userId) {
         String sql = "DELETE FROM pending_messages WHERE user_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -122,13 +99,7 @@ public class MessageDAO {
             e.printStackTrace();
         }
     }
-    /**
-     * Récupérer la conversation entre deux utilisateurs.
-     *
-     * @param userId1 ID du premier utilisateur.
-     * @param userId2 ID du deuxième utilisateur.
-     * @return Liste des messages de la conversation.
-     */
+
     public List<Message> getConversation(int userId1, int userId2) {
         List<Message> messages = new ArrayList<>();
         String sql = "SELECT m.*, u1.email AS senderEmail, u2.email AS receiverEmail " +

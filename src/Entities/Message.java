@@ -1,9 +1,9 @@
 package Entities;
 
 public class Message {
-    private int messageId;  // Added to represent message_id from table
+    private int messageId;
     private String senderEmail;
-    private String receiverEmail;  // Added to represent receiver_Email from table
+    private String receiverEmail;
     private String message;
     private String messageType;
     private String fileName;
@@ -19,7 +19,6 @@ public class Message {
         this.date = date;
     }
 
-    // Getters
     public int getMessageId() {
         return messageId;
     }
