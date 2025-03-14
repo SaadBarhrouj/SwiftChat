@@ -17,6 +17,12 @@ public class Group{
         this.adminId = admin;
         this.membersMap = new HashMap<>();
     }
+    public Group(int id, String name, String description) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+    }
+
     public int getId(){return this.id;}
     public String getName(){return this.name;}
     public String getDescription(){return this.description;}
@@ -48,12 +54,12 @@ public class Group{
         else
             return false;
     }
-    public void addMember(int memberID){
-        this.membersMap.put(Integer.valueOf(memberID), false);
+    public void addMember(int memberID) {
+        this.membersMap.put(memberID, false);
     }
-    public void removeMember(int memberID){
-        if(membersMap.containsKey(memberID))
-            this.membersMap.remove(memberID);
+
+    public void removeMember(int memberID) {
+        this.membersMap.remove(memberID);
     }
     public boolean allOffline(){
         Iterator<Map.Entry<Integer, Boolean> >
