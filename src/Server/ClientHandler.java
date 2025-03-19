@@ -52,17 +52,19 @@ public class ClientHandler extends Thread {
         try {
             authenticateUser();
             if (Auth) {
-                receiveAndDeleteMessages(); // Afficher et supprimer les messages en attente
+                boolean hasNewMessages = receiveAndDeleteMessages();
+                if (!hasNewMessages) {
+                    dos.writeUTF("Aucun nouveau message.");
+                }
+
                 while (true) {
                     userMenu();
                     String messageType = dis.readUTF();
                     switch (messageType) {
                         case "text":
-                            // Handle text message
                             sendUserMessage();
                             break;
                         case "file":
-                            // Handle file message
                             receiveFile();
                             break;
                         default:
@@ -79,6 +81,7 @@ public class ClientHandler extends Thread {
         }
     }
 
+
     private void authenticateUser() throws IOException {
         String choice;
         do {
@@ -88,7 +91,6 @@ public class ClientHandler extends Thread {
             String name, email, password, confirmPassword;
             switch (choice) {
                 case "a":
-                    // Inscription
                     this.dos.writeUTF("Veuillez entrer votre nom :");
                     name = this.dis.readLine();
                     this.dos.writeUTF("Veuillez entrer votre email :");
@@ -100,30 +102,33 @@ public class ClientHandler extends Thread {
                     Auth = register(name, email, password, confirmPassword);
                     break;
                 case "b":
-                    // Connexion
                     this.dos.writeUTF("Veuillez entrer votre email :");
                     email = this.dis.readLine();
                     this.dos.writeUTF("Veuillez entrer votre mot de passe :");
                     password = this.dis.readLine();
                     Auth = login(email, password);
+                    if (Auth) {
+                         boolean hasNewMessagesLogin = receiveAndDeleteMessages();
+                        if (!hasNewMessagesLogin) {
+                           
+                        }
+                    }
                     break;
                 default:
-                    this.dos.writeUTF("Choix invalide, veuillez réessayer");
+                    this.dos.writeUTF("Choix invalide, veuillez reessayer");
             }
         } while (!Auth);
     }
 
+//a verifie !!!!!
     private void receiveFile() throws IOException {
         new Thread(() -> {
             try {
-                // 1. Recevoir le nom du fichier et sa taille
                 String fileName = dis.readUTF();
                 long fileSize = dis.readLong();
-    
-                // 2. Créer un fichier local pour stocker les données reçues
+
                 File file = new File("received_" + fileName);
                 try (FileOutputStream fos = new FileOutputStream(file)) {
-                    // Recevoir le fichier par morceaux
                     byte[] buffer = new byte[4096];
                     int bytesRead;
                     long totalBytesRead = 0;
@@ -132,11 +137,11 @@ public class ClientHandler extends Thread {
                         totalBytesRead += bytesRead;
                         fos.write(buffer, 0, bytesRead);
                     }
-    
-                    dos.writeUTF("Fichier reçu avec succès : " + file.getAbsolutePath());
+
+                    dos.writeUTF("Fichier recu avec succes : " + file.getAbsolutePath());
                 } catch (IOException e) {
                     e.printStackTrace();
-                    dos.writeUTF("Échec de la réception du fichier.");
+                    dos.writeUTF("Echec de la reception du fichier.");
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -144,25 +149,20 @@ public class ClientHandler extends Thread {
         }).start();
     }
 
-    private void showMainMenu() throws IOException {
-        this.dos.writeUTF("\n====== Menu Principal ======\n");
-        this.dos.writeUTF("a. S'inscrire\n");
-        this.dos.writeUTF("b. Se connecter\n");
-        this.dos.writeUTF("============================\n");
-        this.dos.writeUTF("Veuillez entrer votre choix :");
-    }
+    
+
 
     private boolean login(String email, String password) {
         try {
             ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
             if (rs.next()) {
-                dos.writeUTF("Connexion réussie");
+                dos.writeUTF("Connexion reussie");
                 userAccount = new User(rs.getInt("user_id"), rs.getString("name"), rs.getString("email"), rs.getString("password"));
                 userDAO.setUserOnlineStatus(userAccount.getId(), true);
-                mapDos.put(email, dos); // Ajouter l'utilisateur à la Map des utilisateurs connectés
+                mapDos.put(email, dos);
                 return true;
             }
-            dos.writeUTF("Échec de la connexion");
+            dos.writeUTF("Echec de la connexion");
             return false;
         } catch (SQLException | IOException e) {
             e.printStackTrace();
@@ -173,7 +173,7 @@ public class ClientHandler extends Thread {
     private boolean register(String name, String email, String password, String confirmPassword) {
         try {
             if (name.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
-                dos.writeUTF("Tous les champs doivent être remplis.");
+                dos.writeUTF("Tous les champs doivent etre remplis.");
                 return false;
             }
             if (!isValidEmail(email)) {
@@ -181,7 +181,7 @@ public class ClientHandler extends Thread {
                 return false;
             }
             if (!isValidPassword(password)) {
-                dos.writeUTF("Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre.");
+                dos.writeUTF("Le mot de passe doit contenir au moins 8 caracteres, une majuscule, une minuscule et un chiffre.");
                 return false;
             }
             if (!password.equals(confirmPassword)) {
@@ -189,15 +189,16 @@ public class ClientHandler extends Thread {
                 return false;
             }
             if (userDAO.userExists(email)) {
-                dos.writeUTF("Email déjà utilisé");
+                dos.writeUTF("Email deja utilise");
                 return false;
             }
             if (userDAO.insertUser(name, email, password, confirmPassword)) {
                 ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
                 if (rs.next()) {
                     userAccount = new User(rs.getInt("user_id"), rs.getString("name"), rs.getString("email"), rs.getString("password"));
-                    dos.writeUTF("Inscription réussie");
+                    dos.writeUTF("Inscription reussie");
                     userDAO.setUserOnlineStatus(userAccount.getId(), true);
+                    mapDos.put(email, dos);
                     return true;
                 }
             }
@@ -207,9 +208,11 @@ public class ClientHandler extends Thread {
         return false;
     }
 
+
     private boolean isValidEmail(String email) {
         return email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
+
 
     private boolean isValidPassword(String password) {
         return password.length() >= 8 &&
@@ -218,18 +221,31 @@ public class ClientHandler extends Thread {
                 password.matches(".*[0-9].*");
     }
 
+
+    private void showMainMenu() throws IOException {
+        StringBuilder menu = new StringBuilder();
+        menu.append("====== Menu Principal ======\r\n");
+        menu.append("a. S'inscrire\r\n");
+        menu.append("b. Se connecter\r\n");
+        menu.append("============================\r\n");
+        menu.append("Veuillez entrer votre choix :");
+        this.dos.writeUTF(menu.toString());
+    }
+    
     private void userMenu() throws IOException {
         String choice;
         do {
-            dos.writeUTF("\n====== Menu Utilisateur ======\n");
-            dos.writeUTF("1. Gestion des Contacts\n");
-            dos.writeUTF("2. Gestion des Messages\n");
-            dos.writeUTF("3. Gestion des Groupes\n");
-            dos.writeUTF("4. Mettre à jour le profil\n");
-            dos.writeUTF("5. Se déconnecter\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
-
+            StringBuilder menu = new StringBuilder();
+            menu.append("\r\n====== Menu Utilisateur ======\r\n");
+            menu.append("1. Gestion des Contacts\r\n");
+            menu.append("2. Gestion des Messages\r\n");
+            menu.append("3. Gestion des Groupes\r\n");
+            menu.append("4. Mettre a jour le profil\r\n");
+            menu.append("5. Se deconnecter\r\n");
+            menu.append("==============================\r\n");
+            menu.append("Veuillez entrer votre choix :");
+            dos.writeUTF(menu.toString());
+    
             choice = dis.readLine();
             switch (choice) {
                 case "1":
@@ -248,23 +264,25 @@ public class ClientHandler extends Thread {
                     logout();
                     break;
                 default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
+                    dos.writeUTF("Choix invalide, veuillez reessayer\r\n");
             }
         } while (!choice.equals("5"));
     }
-
+    
     private void contactMenu() throws IOException {
         String choice;
         do {
-            dos.writeUTF("\n====== Menu Contacts ======\n");
-            dos.writeUTF("a. Ajouter un contact\n");
-            dos.writeUTF("b. Supprimer un contact\n");
-            dos.writeUTF("c. Modifier le surnom\n");
-            dos.writeUTF("d. Lister les contacts\n");
-            dos.writeUTF("e. Retour au menu principal\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
-
+            StringBuilder menu = new StringBuilder();
+            menu.append("\r\n====== Menu Contacts ======\r\n");
+            menu.append("a. Ajouter un contact\r\n");
+            menu.append("b. Supprimer un contact\r\n");
+            menu.append("c. Modifier le surnom\r\n");
+            menu.append("d. Lister les contacts\r\n");
+            menu.append("e. Retour au menu principal\r\n");
+            menu.append("==============================\r\n");
+            menu.append("Veuillez entrer votre choix :");
+            dos.writeUTF(menu.toString());
+    
             choice = dis.readLine();
             switch (choice) {
                 case "a":
@@ -282,21 +300,23 @@ public class ClientHandler extends Thread {
                 case "e":
                     break;
                 default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
+                    dos.writeUTF("Choix invalide, veuillez reessayer\r\n");
             }
         } while (!choice.equals("e"));
     }
-
+    
     private void messageMenu() throws IOException {
         String choice;
         do {
-            dos.writeUTF("\n====== Menu Messages ======\n");
-            dos.writeUTF("a. Envoyer un message\n");
-            dos.writeUTF("b. Envoyer un fichier\n");  // Nouvelle option
-            dos.writeUTF("c. Voir la conversation\n");
-            dos.writeUTF("d. Retour au menu principal\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
+            StringBuilder menu = new StringBuilder();
+            menu.append("\r\n====== Menu Messages ======\r\n");
+            menu.append("a. Envoyer un message\r\n");
+            menu.append("b. Envoyer un fichier\r\n");
+            menu.append("c. Voir la conversation\r\n");
+            menu.append("d. Retour au menu principal\r\n");
+            menu.append("==============================\r\n");
+            menu.append("Veuillez entrer votre choix :");
+            dos.writeUTF(menu.toString());
     
             choice = dis.readLine();
             switch (choice) {
@@ -304,7 +324,7 @@ public class ClientHandler extends Thread {
                     sendUserMessage();
                     break;
                 case "b":
-                    sendFile();  // Nouvelle méthode pour envoyer un fichier
+                    sendFile();
                     break;
                 case "c":
                     displayConversation();
@@ -312,24 +332,26 @@ public class ClientHandler extends Thread {
                 case "d":
                     break;
                 default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
+                    dos.writeUTF("Choix invalide, veuillez veuillez reessayer\r\n");
             }
         } while (!choice.equals("d"));
     }
-
+    
     private void groupMenu() throws IOException {
         String choice;
         do {
-            dos.writeUTF("\n====== Menu Groupes ======\n");
-            dos.writeUTF("a. Créer un groupe\n");
-            dos.writeUTF("b. Rejoindre un groupe\n");
-            dos.writeUTF("c. Ajouter un membre à un groupe\n");
-            dos.writeUTF("d. Supprimer un membre d'un groupe\n");
-            dos.writeUTF("e. Afficher les groupes disponibles\n");
-            dos.writeUTF("f. Envoyer un message à un groupe\n");
-            dos.writeUTF("g. Retour au menu principal\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
+            StringBuilder menu = new StringBuilder();
+            menu.append("\r\n====== Menu Groupes ======\r\n");
+            menu.append("a. Creer un groupe\r\n");
+            menu.append("b. Rejoindre un groupe\r\n");
+            menu.append("c. Ajouter un membre a un groupe\r\n");
+            menu.append("d. Supprimer un membre d'un groupe\r\n");
+            menu.append("e. Afficher les groupes disponibles\r\n");
+            menu.append("f. Envoyer un message a un groupe\r\n");
+            menu.append("g. Retour au menu principal\r\n");
+            menu.append("==============================\r\n");
+            menu.append("Veuillez entrer votre choix :");
+            dos.writeUTF(menu.toString());
     
             choice = dis.readLine();
             switch (choice) {
@@ -354,7 +376,7 @@ public class ClientHandler extends Thread {
                 case "g":
                     break;
                 default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
+                    dos.writeUTF("Choix invalide, veuillez reessayer\r\n");
             }
         } while (!choice.equals("g"));
     }
@@ -363,51 +385,56 @@ public class ClientHandler extends Thread {
         String groupName = dis.readLine();
         int groupId = groupDAO.getGroupIdByName(groupName);
         if (groupId == -1) {
-            dos.writeUTF("Groupe introuvable !");
+            dos.writeUTF("Groupe introuvable");
             return;
         }
-    
-        // Vérifier si l'utilisateur est l'admin du groupe
+
         if (!groupDAO.isGroupAdmin(userAccount.getId(), groupId)) {
-            dos.writeUTF("Vous n'êtes pas l'administrateur de ce groupe.");
+            dos.writeUTF("Pas administrateur de ce groupe.");
             return;
         }
-    
-        dos.writeUTF("Entrez l'email de l'utilisateur à supprimer :");
+
+        dos.writeUTF("Entrez email de utilisateur a supprimer :");
         String email = dis.readLine();
         int userId = userDAO.getUserIdByEmail(email);
         if (userId == -1) {
-            dos.writeUTF("Utilisateur introuvable !");
+            dos.writeUTF("Utilisateur introuvable ");
             return;
         }
-    
+
         boolean success = groupDAO.removeUserFromGroup(userId, groupId);
-        dos.writeUTF(success ? "Utilisateur supprimé du groupe avec succès." : "Échec de la suppression de l'utilisateur du groupe.");
-    
-        // Notify the user if they are online
+        dos.writeUTF(success ? "Utilisateur supprime du groupe avec succes." : "Echec de la suppression de utilisateur du groupe.");
+
         String recipientEmail = userDAO.getEmailById(userId);
         if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
             DataOutputStream recipientDos = mapDos.get(recipientEmail);
             try {
-                recipientDos.writeUTF("Vous avez été supprimé du groupe " + groupName + " par l'administrateur.");
-                SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+                recipientDos.writeUTF("Vous avez ete supprime du groupe " + groupName + " par l'administrateur.");
+                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
+
+
     private void displayUserGroups() throws IOException {
         List<Group> groups = groupDAO.getGroupsForUser(userAccount.getId());
         if (groups.isEmpty()) {
-            dos.writeUTF("Vous n'êtes membre d'aucun groupe.");
+            dos.writeUTF("Vous n'etes membre d'aucun groupe.");
         } else {
-            dos.writeUTF("Groupes dont vous êtes membre :");
+            dos.writeUTF("Groupes dont vous etes membre :");
+            StringBuilder groupList = new StringBuilder(); // Use StringBuilder for efficient string building
+
             for (Group group : groups) {
-                dos.writeUTF("Nom : " + group.getName() + ", Description : " + group.getDescription());
+                groupList.append("Nom: ").append(group.getName()).append(", Description: ").append(group.getDescription()).append("\r\n"); // Append each group info
             }
+
+            dos.writeUTF(groupList.toString()); // Send the complete list as one message.
         }
     }
-    
+
+
     private void addMemberToGroup() throws IOException {
         dos.writeUTF("Entrez le nom du groupe :");
         String groupName = dis.readLine();
@@ -416,36 +443,37 @@ public class ClientHandler extends Thread {
             dos.writeUTF("Groupe introuvable !");
             return;
         }
-    
-        // Vérifier si l'utilisateur est l'admin du groupe
+
+
         if (!groupDAO.isGroupAdmin(userAccount.getId(), groupId)) {
-            dos.writeUTF("Vous n'êtes pas l'administrateur de ce groupe.");
+            dos.writeUTF("Vous n'etes pas l'administrateur de ce groupe.");
             return;
         }
-    
-        dos.writeUTF("Entrez l'email de l'utilisateur à ajouter :");
+
+        dos.writeUTF("Entrez l'email de l'utilisateur a ajouter :");
         String email = dis.readLine();
         int userId = userDAO.getUserIdByEmail(email);
         if (userId == -1) {
             dos.writeUTF("Utilisateur introuvable !");
             return;
         }
-    
+
         boolean success = groupDAO.addUserToGroup(userId, groupId);
-        dos.writeUTF(success ? "Utilisateur ajouté au groupe avec succès." : "Échec de l'ajout de l'utilisateur au groupe.");
-    
-        // Notify the user if they are online
+        dos.writeUTF(success ? "Utilisateur ajoute au groupe avec succes." : "Echec de l'ajout de l'utilisateur au groupe.");
+
         String recipientEmail = userDAO.getEmailById(userId);
         if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
             DataOutputStream recipientDos = mapDos.get(recipientEmail);
             try {
-                recipientDos.writeUTF("Vous avez été ajouté au groupe " + groupName + " par l'administrateur.");
-                SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+                recipientDos.writeUTF("Vous avez ete ajoute au groupe " + groupName + " par l'administrateur.");
+                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
+
+
     private void joinGroup() throws IOException {
         dos.writeUTF("Entrez le nom du groupe :");
         String groupName = dis.readLine();
@@ -454,115 +482,114 @@ public class ClientHandler extends Thread {
             dos.writeUTF("Groupe introuvable !");
             return;
         }
-    
+
         boolean success = groupDAO.addUserToGroup(userAccount.getId(), groupId);
-        dos.writeUTF(success ? "Vous avez rejoint le groupe avec succès." : "Échec de la jonction au groupe.");
+        dos.writeUTF(success ? "Vous avez rejoint le groupe avec succes." : "Echec de la jonction au groupe.");
     }
-   
+
+
+
     private void sendFile() throws IOException {
-        // 1. Demander le surnom du destinataire
         this.dos.writeUTF("Entrez le surnom du destinataire :");
         String nickname = this.dis.readLine();
-    
-        // 2. Vérifier si le destinataire existe
+
         int recipientUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
         if (recipientUserId == -1) {
             this.dos.writeUTF("Utilisateur introuvable !");
             return;
         }
-    
-        // 3. Vérifier si le destinataire est un contact
+
         if (!contactDAO.areContacts(userAccount.getId(), recipientUserId)) {
             this.dos.writeUTF("Le destinataire n'est pas dans votre liste de contacts.");
             this.dos.writeUTF("Souhaitez-vous ajouter ce contact ? (oui/non)");
             String response = this.dis.readLine();
             if (response.equalsIgnoreCase("oui")) {
-                handleAddContact(); // Rediriger vers la méthode d'ajout de contact
-                return; // Retourner à l'appelant après la gestion des contacts
+                handleAddContact();
+                return;
             } else {
                 this.dos.writeUTF("Retour au menu principal.");
-                return; // Retourner au menu principal
+                return;
             }
         }
-    
-        // 4. Demander le chemin du fichier à envoyer
-        this.dos.writeUTF("Entrez le chemin complet du fichier à envoyer :");
+
+        this.dos.writeUTF("Entrez le chemin complet du fichier a envoyer :");
         String filePath = this.dis.readLine();
-    
+
         File file = new File(filePath);
         if (!file.exists()) {
             this.dos.writeUTF("Fichier introuvable !");
             return;
         }
-    
-        // 5. Insérer le message de fichier dans la base de données
+
         int messageId = messageDAO.insertFileMessage(userAccount.getId(), recipientUserId, file.getName());
         if (messageId == -1) {
             this.dos.writeUTF("Erreur : Impossible d'enregistrer le message de fichier.");
             return;
         }
-    
-        // 6. Envoyer le fichier
+
         try (FileInputStream fis = new FileInputStream(file)) {
-            // Envoyer le nom du fichier et sa taille
             this.dos.writeUTF(file.getName());
             this.dos.writeLong(file.length());
-    
-            // Envoyer le fichier par morceaux
+
             byte[] buffer = new byte[4096];
             int bytesRead;
             while ((bytesRead = fis.read(buffer)) != -1) {
                 this.dos.write(buffer, 0, bytesRead);
             }
-    
-            this.dos.writeUTF("Fichier envoyé avec succès.");
+
+            this.dos.writeUTF("Fichier envoye avec succes.");
         } catch (IOException e) {
             e.printStackTrace();
-            this.dos.writeUTF("Échec de l'envoi du fichier.");
+            this.dos.writeUTF("Echec de l'envoi du fichier.");
         }
-    
-        // 7. Notifier le destinataire s'il est en ligne
+
         String recipientEmail = userDAO.getEmailById(recipientUserId);
         if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
             DataOutputStream recipientDos = mapDos.get(recipientEmail);
             try {
                 recipientDos.writeUTF("Nouveau fichier de " + userAccount.getEmail() + " : " + file.getName());
-                SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
             } catch (IOException e) {
                 e.printStackTrace();
             }
         } else {
-            // Stocker le message en attente si le destinataire est hors ligne
             boolean pendingStored = messageDAO.storePendingMessage(recipientUserId, messageId);
             if (pendingStored) {
-                this.dos.writeUTF("Le destinataire est déconnecté. Le fichier sera délivré à sa reconnexion.");
+                this.dos.writeUTF("Le destinataire est deconnecte. Le fichier sera delivre a sa reconnexion.");
             } else {
-                this.dos.writeUTF("Échec de l'enregistrement du fichier en attente.");
+                this.dos.writeUTF("Echec de l'enregistrement du fichier en attente.");
             }
         }
     }
+
+
     private void displayConversation() throws IOException {
-        dos.writeUTF("Entrez le surnom du contact pour voir la conversation :");
+          dos.writeUTF("Entrez le surnom du contact pour voir la conversation :");
         String nickname = dis.readLine();
 
-        // Récupérer l'ID du contact à partir du surnom
         int contactUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
         if (contactUserId == -1) {
             dos.writeUTF("Contact introuvable !");
             return;
         }
 
-        // Récupérer la conversation depuis la table `messages`
         List<Message> messages = messageDAO.getConversation(userAccount.getId(), contactUserId);
+        String contactEmail = userDAO.getEmailById(contactUserId);
+        String status = mapDos.containsKey(contactEmail) ? "en ligne" : "hors ligne";
+
         if (messages.isEmpty()) {
-            dos.writeUTF("Aucun message trouvé.");
+            dos.writeUTF("Aucun message trouve avec " + nickname + " (" + status + ").");
         } else {
-            // Afficher les messages de la conversation
+            StringBuilder conversation = new StringBuilder(); // Use StringBuilder for efficient string building
+
             for (Message msg : messages) {
-                dos.writeUTF("De " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
+                conversation.append("De ").append(msg.getSenderEmail()).append(" a ").append(msg.getDate()).append(" : ").append(msg.getMessage()).append("\r\n");  //Append \r\n for new line
             }
+             dos.writeUTF(conversation.toString()); //Send one combined String
         }
     }
+
+
     private void sendGroupMessage() throws IOException {
         dos.writeUTF("Entrez le nom du groupe :");
         String groupName = dis.readLine();
@@ -571,18 +598,16 @@ public class ClientHandler extends Thread {
             dos.writeUTF("Groupe introuvable !");
             return;
         }
-    
+
         dos.writeUTF("Entrez votre message :");
         String message = dis.readLine();
-    
-        // Insérer le message dans la table `messages`
+
         int messageId = messageDAO.insertGroupMessage(userAccount.getId(), groupId, message);
         if (messageId == -1) {
             dos.writeUTF("Erreur : Impossible d'enregistrer le message.");
             return;
         }
-    
-        // Récupérer les membres du groupe
+
         List<Integer> memberIds = groupDAO.getGroupMembers(groupId);
         for (int memberId : memberIds) {
             String recipientEmail = userDAO.getEmailById(memberId);
@@ -590,47 +615,54 @@ public class ClientHandler extends Thread {
                 DataOutputStream recipientDos = mapDos.get(recipientEmail);
                 try {
                     recipientDos.writeUTF("Nouveau message dans le groupe " + groupName + " de " + userAccount.getEmail() + " : " + message);
-                    SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+                    SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             } else {
-                // Stocker le message en attente si le membre est hors ligne
                 boolean pendingStored = messageDAO.storePendingMessage(memberId, messageId);
                 if (pendingStored) {
-                    dos.writeUTF("Le message sera délivré à la reconnexion des membres hors ligne.");
+                    dos.writeUTF("Le message sera delivre a la reconnexion des membres hors ligne.");
                 } else {
-                    dos.writeUTF("Échec de l'enregistrement du message en attente.");
+                    dos.writeUTF("Echec de l'enregistrement du message en attente.");
                 }
             }
         }
-        dos.writeUTF("Message envoyé au groupe avec succès.");
+        dos.writeUTF("Message envoye au groupe avec succes.");
     }
     private void handleAddContact() throws IOException {
-        dos.writeUTF("Entrez l'email du contact :");
-        String email = dis.readLine();
+        this.dos.writeUTF("Entrez l'email du contact :");
+        String email = this.dis.readLine();
+
         int contactUserId = userDAO.getUserIdByEmail(email);
         if (contactUserId == -1) {
-            dos.writeUTF("Utilisateur introuvable !");
+            this.dos.writeUTF("Utilisateur introuvable !");
             return;
         }
-        dos.writeUTF("Entrez un surnom (optionnel) :");
-        String nickname = dis.readLine();
+
+        this.dos.writeUTF("Entrez le surnom du contact :");
+        String nickname = this.dis.readLine();
+
         boolean success = contactDAO.addContact(userAccount.getId(), contactUserId, nickname);
-        dos.writeUTF(success ? "Contact ajouté !" : "Échec de l'ajout");
+        this.dos.writeUTF(success ? "Contact ajoute avec succes !" : "Echec de l'ajout du contact.");
     }
 
+
+
     private void handleDeleteContact() throws IOException {
-        dos.writeUTF("Entrez l'email du contact à supprimer :");
-        String email = dis.readLine();
-        int contactUserId = userDAO.getUserIdByEmail(email);
+        dos.writeUTF("Entrez le surnom du contact a supprimer :");
+        String nickname = dis.readLine();
+
+        int contactUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
         if (contactUserId == -1) {
-            dos.writeUTF("Aucun utilisateur trouvé avec cet email");
+            dos.writeUTF("Aucun contact trouve avec ce surnom.");
             return;
         }
+
         boolean success = contactDAO.deleteContact(userAccount.getId(), contactUserId);
-        dos.writeUTF(success ? "Contact supprimé avec succès" : "Erreur lors de la suppression");
+        dos.writeUTF(success ? "Contact supprime avec succes." : "Erreur lors de la suppression.");
     }
+
 
     private void handleUpdateNickname() throws IOException {
         dos.writeUTF("Entrez l'email du contact :");
@@ -643,115 +675,114 @@ public class ClientHandler extends Thread {
         dos.writeUTF("Entrez le nouveau surnom :");
         String newNickname = dis.readLine();
         boolean success = contactDAO.updateNickname(userAccount.getId(), contactUserId, newNickname);
-        dos.writeUTF(success ? "Surnom mis à jour" : "Échec de la mise à jour");
+        dos.writeUTF(success ? "Surnom mis a jour" : "Echec de la mise a jour");
     }
 
     private void handleListContacts() throws IOException {
         List<Contact> contacts = contactDAO.getContacts(userAccount.getId());
         if (contacts.isEmpty()) {
-            dos.writeUTF("📭 Aucun contact trouvé");
+            dos.writeUTF("Aucun contact trouve");
             return;
         }
-        StringBuilder sb = new StringBuilder("Liste des contacts :\n");
+        StringBuilder sb = new StringBuilder("Liste des contacts :\r\n");
         for (Contact contact : contacts) {
             String email = userDAO.getEmailById(contact.getContactUserId());
-            sb.append("➤ ").append(email)
-                    .append(contact.getNickname() != null ? " (" + contact.getNickname() + ")" : "")
+            String status = mapDos.containsKey(email) ? "en ligne" : "hors ligne";
+            sb.append(" ").append(contact.getNickname() != null ? contact.getNickname() : email)
+                    .append(" (").append(status).append(")")
                     .append("\n");
+                    sb.append("\r\n");
         }
         dos.writeUTF(sb.toString());
     }
 
+
     private void sendUserMessage() throws IOException {
-        // 1. Demander le surnom du destinataire
         this.dos.writeUTF("Entrez le surnom du destinataire :");
         String nickname = this.dis.readLine();
-    
-        // 2. Vérifier si le destinataire existe
+
         int recipientUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
         if (recipientUserId == -1) {
-            this.dos.writeUTF("Utilisateur introuvable !");
-            return;
-        }
-    
-        // 3. Vérifier si le destinataire est un contact
-        if (!contactDAO.areContacts(userAccount.getId(), recipientUserId)) {
             this.dos.writeUTF("Le destinataire n'est pas dans votre liste de contacts.");
             this.dos.writeUTF("Souhaitez-vous ajouter ce contact ? (oui/non)");
             String response = this.dis.readLine();
+
             if (response.equalsIgnoreCase("oui")) {
-                handleAddContact(); // Rediriger vers la méthode d'ajout de contact
-                return; // Retourner à l'appelant après la gestion des contacts
+                handleAddContact();
+                recipientUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
+                if (recipientUserId == -1) {
+                    this.dos.writeUTF("Erreur : Le contact n'a pas pu etre ajoute.");
+                    return;
+                }
             } else {
                 this.dos.writeUTF("Retour au menu principal.");
-                return; // Retourner au menu principal
+                return;
             }
         }
-    
-        // 4. Demander le message à envoyer
+
         this.dos.writeUTF("Entrez votre message :");
         String message = this.dis.readLine();
-    
-        // 5. Insérer le message dans la table `messages`
+
         int messageId = messageDAO.insertMessage(userAccount.getId(), recipientUserId, message);
         if (messageId == -1) {
             this.dos.writeUTF("Erreur : Impossible d'enregistrer le message.");
             return;
         }
-    
-        // 6. Récupérer l'email du destinataire pour vérifier s'il est en ligne
+
         String recipientEmail = userDAO.getEmailById(recipientUserId);
         if (recipientEmail == null) {
-            this.dos.writeUTF("Erreur : Impossible de récupérer l'email du destinataire.");
+            this.dos.writeUTF("Erreur : Impossible de recuperer l'email du destinataire.");
             return;
         }
-    
-        // 7. Vérifier si le destinataire est en ligne
+
         if (mapDos.containsKey(recipientEmail)) {
-            // Envoyer le message en temps réel
             DataOutputStream recipientDos = mapDos.get(recipientEmail);
             try {
                 recipientDos.writeUTF("Nouveau message de " + userAccount.getEmail() + " : " + message);
-                this.dos.writeUTF("Message envoyé avec succès.");
-    
-                // Jouer un son pour le destinataire
-                SoundPlayer.playSound("C:\\Users\\Kaoutar Iabakriman\\Desktop\\SwiftChat\\src\\utils\\notif.wav");
+                this.dos.writeUTF("Message envoye avec succes.");
+
+                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
             } catch (IOException e) {
                 e.printStackTrace();
-                this.dos.writeUTF("Échec de l'envoi du message.");
+                this.dos.writeUTF("Echec de l'envoi du message.");
             }
         } else {
-            // 8. Stocker le message en attente dans `pending_messages`
             boolean pendingStored = messageDAO.storePendingMessage(recipientUserId, messageId);
             if (pendingStored) {
-                this.dos.writeUTF("Le destinataire est déconnecté. Le message sera délivré à sa reconnexion.");
+                this.dos.writeUTF("Le destinataire est deconnecte. Le message sera delivre a sa reconnexion.");
             } else {
-                this.dos.writeUTF("Échec de l'enregistrement du message en attente.");
+                this.dos.writeUTF("Echec de l'enregistrement du message en attente.");
             }
         }
     }
-
-    private void receiveAndDeleteMessages() {
+    private boolean receiveAndDeleteMessages() {
+        boolean hasNewMessages = false;
         try {
-            // Récupérer les messages en attente pour l'utilisateur connecté
             var messages = messageDAO.getPendingMessagesForUser(userAccount.getId());
-            if (messages.isEmpty()) {
-                dos.writeUTF("Aucun nouveau message.");
-            } else {
-                // Afficher les messages en attente
+            System.out.println(userAccount.getId());
+            System.out.println("Messages en attente recuperes : " + messages.size());
+            if (!messages.isEmpty()) {
+                hasNewMessages = true;
+                StringBuilder messageList = new StringBuilder();
                 for (var msg : messages) {
+                   String messageInfo;
                     if ("file".equals(msg.getMessageType())) {
-                        dos.writeUTF("Nouveau fichier de " + msg.getSenderEmail() + " : " + msg.getFileName());
+                       messageInfo = "Nouveau fichier de " + msg.getSenderEmail() + " : " + msg.getFileName();
                     } else {
-                        dos.writeUTF("Nouveau message de " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
+                        messageInfo = "Nouveau message de " + msg.getSenderEmail() + " a " + msg.getDate() + " : " + msg.getMessage();
                     }
+                    messageList.append(messageInfo).append("\r\n"); // Append each group info
+
+                    SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
                 }
-                // Supprimer les messages en attente après les avoir affichés
+                dos.writeUTF(messageList.toString());
                 messageDAO.deletePendingMessagesForUser(userAccount.getId());
+
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return hasNewMessages;
     }
     private void createGroup() throws IOException {
         dos.writeUTF("Entrez le nom du groupe :");
@@ -759,13 +790,13 @@ public class ClientHandler extends Thread {
         dos.writeUTF("Entrez la description du groupe :");
         String description = dis.readLine();
         if (groupDAO.createGroup(name, description, userAccount.getId())) {
-            dos.writeUTF("Groupe créé avec succès.");
+            dos.writeUTF("Groupe cree avec succes.");
         } else {
-            dos.writeUTF("Échec de la création du groupe.");
+            dos.writeUTF("Echec de la creation du groupe.");
         }
     }
 
-    
+
 
     private void updateProfile() throws IOException {
         dos.writeUTF("Entrez votre nouveau nom :");
@@ -775,15 +806,16 @@ public class ClientHandler extends Thread {
         dos.writeUTF("Entrez votre nouveau mot de passe :");
         String newPassword = dis.readLine();
         userAccount.updateProfile(newEmail, newPassword, newName);
-        dos.writeUTF("Profil mis à jour avec succès !");
+        dos.writeUTF("Profil mis a jour avec succes !");
     }
+
 
     private void logout() {
         try {
-            dos.writeUTF("Déconnexion en cours...");
+            dos.writeUTF("Deconnexion en cours...");
             Auth = false;
             if (userAccount != null) {
-                mapDos.remove(userAccount.getEmail()); // Retirer l'utilisateur de la Map
+                mapDos.remove(userAccount.getEmail());
                 userDAO.setUserOnlineStatus(userAccount.getId(), false);
             }
             dis.close();
@@ -804,6 +836,7 @@ public class ClientHandler extends Thread {
             e.printStackTrace();
         }
     }
+
 
     private void error() {
         if (this.Auth && this.userAccount != null) {
