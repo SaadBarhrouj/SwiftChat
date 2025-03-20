@@ -2,59 +2,47 @@ package Server;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 
 /**
- * ServerChat class is responsible for setting up a server that listens for client connections
- * and handles communication with connected clients.
+ * ServerChat est la classe principale qui configure et démarre le serveur Socket.
+ * Le serveur écoute sur le port 5059 et accepte les connexions entrantes des clients.
+ * Pour chaque client connecté, un nouveau thread est créé pour gérer la communication.
  */
 public class ServerChat {
-    /**
-     * Main method to start the server and handle client connections.
-     *
-     * @param args Command-line arguments (not used in this implementation).
-     */
+
     public static void main(String[] args) {
-        // ServerSocket for accepting client connections
-        ServerSocket serverSocket = null;
+        ServerSocket serverSocket = null; // Server socket pour écouter les connexions entrantes des clients
 
         try {
-            // Initialize the server socket on port 5059
+            // Création du serveur Socket sur le port 5059
             serverSocket = new ServerSocket(5059);
             System.out.println("Server started . . .");
-        } catch (Exception e) {
-            // Handle connection errors
-            System.out.println("Connection error: " + e.getMessage());
-        }
 
-        // Initialize user profiles (assuming Profile.initializeProfiles() is defined elsewhere)
-        // Profile.initializeProfiles();
-
-        // Infinite loop to continuously accept client connections
-        while (true) {
-            Socket clientSocket = null;
-            try {
-                // Accept a new client connection
-                clientSocket = serverSocket.accept();
+            // Boucle infinie pour accepter les connexions des clients
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
                 System.out.println("New client connected: " + clientSocket);
 
-                // Create input and output streams for communication with the client
-                InputStream inputStream = clientSocket.getInputStream();
-                DataInputStream dataInputStream= new DataInputStream(inputStream);
-                OutputStream outputStream = clientSocket.getOutputStream();
-                DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+                // Création des flux d'entrée et de sortie pour communiquer avec le client
+                DataInputStream dataInputStream = new DataInputStream(clientSocket.getInputStream());
+                DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
 
-                // Create a new thread to handle the client
+                // Création d'un nouveau thread pour gérer la communication avec le client
                 Thread clientHandlerThread = new ClientHandler(clientSocket, dataInputStream, dataOutputStream);
-
-                clientHandlerThread.start(); // Start the thread (assuming ClientHandler implements Runnable)
+                clientHandlerThread.start();
+            }
+        } catch (Exception e) {
+            System.err.println("Connection error: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (serverSocket != null && !serverSocket.isClosed()) {
+                    serverSocket.close();
+                }
             } catch (Exception e) {
-                // Print stack trace for any exceptions during client handling
-                System.err.println("Error handling client connection: " + e.getMessage());
-                e.printStackTrace();
+                System.err.println("Error closing server socket: " + e.getMessage());
             }
         }
     }
