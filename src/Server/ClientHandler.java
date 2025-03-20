@@ -1,108 +1,58 @@
 package Server;
 
-import Dao.MessageDAO;
-import Entities.User;
-import Entities.Group;
-import Dao.GroupDAO;
-import Dao.UserDAO;
-import Dao.DatabaseConnection;
-
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.Socket;
-import java.sql.Connection;
-import java.sql.Statement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
+/**
+ * ClientHandler est une classe qui gère la communication avec un client connecté.
+ * Chaque instance de cette classe est exécutée dans un thread séparé pour permettre
+ * une communication simultanée avec plusieurs clients.
+ */
 public class ClientHandler extends Thread {
     private final DataInputStream dis;
     private final DataOutputStream dos;
-    private final Socket commthread;
-    private boolean Auth;
-    private User userAccount;
-    private UserDAO userDAO;
-    private GroupDAO groupDAO;
-    private MessageDAO messageDAO;
-    private Connection conn;
-    private Statement stmt;
-    private ResultSet rs;
+    private final Socket clientSocket;
 
-    public ClientHandler(Socket s, DataInputStream diss, DataOutputStream doss) {
-        this.commthread = s;
-        this.dis = diss;
-        this.dos = doss;
-        this.Auth = false;
-        this.userDAO = new UserDAO();
-        this.groupDAO = new GroupDAO();
-        this.messageDAO = new MessageDAO();
-        this.conn = DatabaseConnection.getConnection();
-        if (this.conn != null) {
-            try {
-                this.stmt = this.conn.createStatement();
-                this.start();
-            } catch (SQLException e) {
-                e.printStackTrace();
-                error();
-            }
-        } else {
-            error();
-        }
+    /**
+     * Constructeur de la classe ClientHandler.
+     *
+     * @param s   Le socket du client connecté.
+     * @param dis Le flux d'entrée pour lire les données du client.
+     * @param dos Le flux de sortie pour envoyer des données au client.
+     */
+    public ClientHandler(Socket s, DataInputStream dis, DataOutputStream dos) {
+        this.clientSocket = s;
+        this.dis = dis;
+        this.dos = dos;
+        this.start(); // Démarre le thread dès que l'objet est créé
     }
 
     @Override
     public void run() {
         try {
+            // Boucle pour gérer la communication avec le client
             while (true) {
-                String choice = "";
-                do {
-                    this.showMenu();
-                    choice = this.dis.readLine(); ;
+                // Exemple de lecture d'un message du client
+                String message = dis.readUTF();
+                System.out.println("Message from client: " + message);
 
-                    String name, email, password;
-                    switch (choice) {
-                        case "a":
-                            this.dos.writeUTF("Veuillez entrer votre nom :");
-                            name = this.dis.readLine(); ;
-                            this.dos.writeUTF("Veuillez entrer votre email :");
-                            email = this.dis.readLine();
-                            this.dos.writeUTF("Veuillez entrer votre mot de passe :");
-                            password = this.dis.readLine(); ;
-                            register(name, email, password);
-                            break;
-                        case "b":
-                            this.dos.writeUTF("Veuillez entrer votre email :");
-                            email = this.dis.readLine();
-                            this.dos.writeUTF("Veuillez entrer votre mot de passe :");
-                            password = this.dis.readLine(); ;
-                            Auth = login(email, password);
-                            break;
-                        default:
-                            this.dos.writeUTF("Choix invalide, veuillez réessayer");
-                    }
-                } while (!Auth);
-
-                if (Auth) {
-
-                    receiveAndDeleteMessages();
-                    // receiveAndDeleteMessages();
-                    userMenu();
-                }
+                // Exemple d'envoi d'un message au client
+                dos.writeUTF("Message received: " + message);
             }
         } catch (IOException e) {
+            System.err.println("Error handling client connection: " + e.getMessage());
             e.printStackTrace();
-            error();
         } finally {
             try {
+                // Fermeture des flux et du socket
                 if (dis != null) dis.close();
                 if (dos != null) dos.close();
-                if (commthread != null && !commthread.isClosed()) commthread.close();
-                if (conn != null && !conn.isClosed()) conn.close();
-            } catch (IOException | SQLException e) {
-                e.printStackTrace();
+                if (clientSocket != null && !clientSocket.isClosed()) clientSocket.close();
+            } catch (IOException e) {
+                System.err.println("Error closing resources: " + e.getMessage());
             }
         }
     }
-
 }
