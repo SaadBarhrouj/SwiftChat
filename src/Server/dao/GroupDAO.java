@@ -1,6 +1,6 @@
-package Dao;
+package Server.dao;
 
-import Entities.Group;
+import Server.entities.Group;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,8 +8,8 @@ import java.util.List;
 public class GroupDAO {
     private Connection conn;
 
-    public GroupDAO() {
-        this.conn = DatabaseConnection.getConnection();
+    public GroupDAO(Connection conn) {
+        this.conn = conn;
     }
 
     public List<Group> getGroupsForUser(int userId) {

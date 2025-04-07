@@ -1,4 +1,4 @@
-package Dao;
+package Server.dao;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,8 +9,8 @@ public class UserDAO {
     private Connection conn;
 
 
-    public UserDAO() {
-        this.conn = DatabaseConnection.getConnection();
+    public UserDAO(Connection conn) {
+        this.conn = conn;
     }
 
     private boolean isValidEmail(String email) {

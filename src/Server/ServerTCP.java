@@ -7,16 +7,14 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 
-
-public class ServerChat {
-
+public class ServerTCP {
     public static void main(String[] args) {
 
-        ServerSocket serverSocket = null; // Server socket to listen for incoming client connections
+        ServerSocket serverSocket = null;
 
         try {
 
-            serverSocket = new ServerSocket(5059);
+            serverSocket = new ServerSocket(3001);
             System.out.println("Server started . . .");
         } catch (Exception e) {
 

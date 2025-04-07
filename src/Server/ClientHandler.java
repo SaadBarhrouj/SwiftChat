@@ -1,839 +1,257 @@
 package Server;
 
-import Dao.*;
-import Entities.*;
+import Server.controllers.*; // Importer les nouveaux contrôleurs
+import Server.dao.*;
+import Server.entities.Contact;
+import Server.entities.Group;
+import Server.entities.Message;
+import Server.entities.User;
+import Server.utils.AnsiColors;
+import Server.views.HelpView;
+import Server.views.MenuView;
+
 import java.io.*;
 import java.net.Socket;
-import java.sql.*;
-import java.util.HashMap;
-import java.util.List;
+import java.net.SocketException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.time.format.DateTimeFormatter; // Importer à nouveau si utilisé ici
+import java.util.List; // Pour notifyContactsOfLogout
 import java.util.Map;
-import utils.SoundPlayer;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ClientHandler extends Thread {
     private final DataInputStream dis;
     private final DataOutputStream dos;
     private final Socket commthread;
-    private boolean Auth;
+    private volatile boolean Auth;
     private User userAccount;
+    private Connection conn;
+
     private UserDAO userDAO;
     private ContactDAO contactDAO;
     private MessageDAO messageDAO;
     private GroupDAO groupDAO;
-    private Connection conn;
-    private Statement stmt;
-    private static Map<String, DataOutputStream> mapDos = new HashMap<>();
+
+    private static final Map<String, DataOutputStream> onlineUserStreams = new ConcurrentHashMap<>();
+
+    private MenuView menuView;
+    private HelpView helpView;
+
+    private AuthenticationController authController;
+    private ContactController contactController;
+    private GroupController groupController;
+    private ChatController chatController;
+    private ProfileController profileController;
+
+    private static final String SERVER_STORAGE = "src/uploads/";
+    // Recréer les constantes si elles sont utilisées dans les méthodes restantes ici
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final String NOTIFICATION_SOUND = "src/utils/notify.wav";
+
 
     public ClientHandler(Socket s, DataInputStream diss, DataOutputStream doss) {
         this.commthread = s;
         this.dis = diss;
         this.dos = doss;
         this.Auth = false;
-        this.userDAO = new UserDAO();
-        this.contactDAO = new ContactDAO();
-        this.messageDAO = new MessageDAO();
-        this.groupDAO = new GroupDAO();
-        this.conn = DatabaseConnection.getConnection();
-        if (this.conn != null) {
-            try {
-                this.stmt = this.conn.createStatement();
-                this.start();
-            } catch (SQLException e) {
-                e.printStackTrace();
-                error();
-            }
-        } else {
-            error();
+        System.out.println("Initializing ClientHandler for " + s.getRemoteSocketAddress() + "...");
+
+        try {
+            this.conn = DatabaseConnection.getConnection();
+            if (this.conn == null) throw new SQLException("DB connection failed.");
+            System.out.println("--> DB connection obtained.");
+
+            this.userDAO = new UserDAO(this.conn);
+            this.contactDAO = new ContactDAO(this.conn);
+            this.messageDAO = new MessageDAO(this.conn);
+            // Assurez-vous que MessageDAO peut recevoir UserDAO si nécessaire
+            // this.messageDAO.setUserDAO(this.userDAO);
+            this.groupDAO = new GroupDAO(this.conn);
+            System.out.println("--> DAOs initialized.");
+
+            this.menuView = new MenuView(this.dis, this.dos);
+            this.helpView = new HelpView(this.dos, this.menuView);
+            System.out.println("--> Views initialized.");
+
+            this.authController = new AuthenticationController(dis, dos, userDAO, menuView, helpView, onlineUserStreams);
+            System.out.println("--> AuthController initialized.");
+
+            File storageDir = new File(SERVER_STORAGE);
+            if (!storageDir.exists() && !storageDir.mkdirs()) { throw new IOException("Failed to create storage directory."); }
+            if (!storageDir.isDirectory() || !storageDir.canWrite()) { throw new IOException("Storage directory invalid/unwritable."); }
+            System.out.println("--> Storage directory verified.");
+
+            System.out.println("ClientHandler initialized successfully.");
+
+        } catch (Exception e) {
+            System.err.println(AnsiColors.RED + "FATAL ERROR during ClientHandler initialization: " + e.getMessage() + AnsiColors.RESET);
+            e.printStackTrace();
+            cleanup();
         }
     }
 
     @Override
     public void run() {
+        String clientIdentifier = getClientIdentifier();
         try {
-            authenticateUser();
-            if (Auth) {
-                receiveAndDeleteMessages(); // Afficher et supprimer les messages en attente
-                while (true) {
-                    userMenu();
-                    // a verifier !!!!!!
-                    String messageType = dis.readUTF();
-                    switch (messageType) {
-                        case "text":
-                            sendUserMessage();
-                            break;
-                        case "file":
-                            receiveFile();
-                            break;
-                        default:
-                            dos.writeUTF("Type de message inconnu.");
-                            break;
+            this.userAccount = authController.handleAuthentication();
+
+            if (this.userAccount != null) {
+                this.Auth = true;
+                clientIdentifier = getClientIdentifier();
+                initializeControllersPostAuth();
+                postAuthenticationTasks();
+                System.out.println(AnsiColors.GREEN + "[CONNECTION] " + clientIdentifier + " ready." + AnsiColors.RESET);
+
+                while (this.Auth) {
+                    try {
+                        menuView.showUserMenu();
+                        String choice = dis.readUTF();
+                        if (choice == null) throw new EOFException("Client disconnected.");
+                        String trimmedChoice = choice.trim();
+
+                        switch (trimmedChoice) {
+                            case "1": contactController.handleMenu(); break;
+                            case "2": chatController.handlePrivateChatSession(); break;
+                            case "3": groupController.handleMenu(); break;
+                            case "4": profileController.updateProfile(); break;
+                            case "5": logout(); break;
+                            default: menuView.sendFeedback("Invalid choice (1-5).", AnsiColors.RED); menuView.promptContinue(); break;
+                        }
+                    } catch (EOFException | SocketException e) {
+                        System.err.println(AnsiColors.YELLOW + "[DISCONNECT] " + clientIdentifier + " disconnected: " + e.getMessage() + AnsiColors.RESET);
+                        this.Auth = false; errorCleanup();
+                    } catch (IOException e) {
+                        System.err.println(AnsiColors.RED + "[IO ERROR] Loop (" + clientIdentifier + "): " + e.getMessage() + AnsiColors.RESET);
+                        e.printStackTrace(); this.Auth = false; errorCleanup();
+                    } catch (Exception e) {
+                        System.err.println(AnsiColors.RED + "[UNEXPECTED ERROR] Loop (" + clientIdentifier + "): " + e.getMessage() + AnsiColors.RESET);
+                        e.printStackTrace(); this.Auth = false; errorCleanup();
                     }
                 }
+                System.out.println(AnsiColors.BLUE + "[DISCONNECT] " + clientIdentifier + " logged out normally." + AnsiColors.RESET);
+
+            } else {
+                System.out.println(AnsiColors.YELLOW + "[AUTH FAILED/INTERRUPTED] for " + clientIdentifier + "." + AnsiColors.RESET);
             }
+
         } catch (IOException e) {
+            System.err.println(AnsiColors.RED + "[FATAL IO ERROR] (" + clientIdentifier + "): " + e.getMessage() + AnsiColors.RESET);
+            if(!(e instanceof EOFException || e instanceof SocketException)) e.printStackTrace();
+            errorCleanup();
+        } catch (Exception e) {
+            System.err.println(AnsiColors.RED + "[FATAL UNEXPECTED ERROR] (" + clientIdentifier + "): " + e.getMessage() + AnsiColors.RESET);
             e.printStackTrace();
-            error();
+            errorCleanup();
         } finally {
             cleanup();
+            System.out.println(AnsiColors.GRAY + "ClientHandler thread finished for " + clientIdentifier + "." + AnsiColors.RESET);
         }
     }
 
-
-    private void authenticateUser() throws IOException {
-        String choice;
-        do {
-            showMainMenu();
-            choice = this.dis.readLine();
-
-            String name, email, password, confirmPassword;
-            switch (choice) {
-                case "a":
-                    // Inscription
-                    this.dos.writeUTF("Veuillez entrer votre nom :");
-                    name = this.dis.readLine();
-                    this.dos.writeUTF("Veuillez entrer votre email :");
-                    email = this.dis.readLine();
-                    this.dos.writeUTF("Veuillez entrer votre mot de passe :");
-                    password = this.dis.readLine();
-                    this.dos.writeUTF("Veuillez confirmer votre mot de passe :");
-                    confirmPassword = this.dis.readLine();
-                    Auth = register(name, email, password, confirmPassword);
-                    break;
-                case "b":
-                    // Connexion
-                    this.dos.writeUTF("Veuillez entrer votre email :");
-                    email = this.dis.readLine();
-                    this.dos.writeUTF("Veuillez entrer votre mot de passe :");
-                    password = this.dis.readLine();
-                    Auth = login(email, password);
-                    if (Auth) {
-                        // Afficher les messages en attente après la connexion réussie
-                        receiveAndDeleteMessages();
-                    }
-                    break;
-                default:
-                    this.dos.writeUTF("Choix invalide, veuillez réessayer");
-            }
-        } while (!Auth);
+    private void initializeControllersPostAuth() {
+        if (userAccount == null) { System.err.println("[INIT CTRL ERROR] No userAccount."); return; }
+        this.contactController = new ContactController(dis, dos, contactDAO, userDAO, menuView, userAccount, onlineUserStreams);
+        this.chatController = new ChatController(dis, dos, messageDAO, contactDAO, userDAO, groupDAO, menuView, helpView, userAccount, onlineUserStreams);
+        this.groupController = new GroupController(dis, dos, groupDAO, userDAO, messageDAO, menuView, helpView, userAccount, onlineUserStreams);
+        this.profileController = new ProfileController(dis, dos, userDAO, menuView, userAccount, onlineUserStreams);
+        this.groupController.setChatController(this.chatController); // Injection
+        System.out.println("--> Post-auth controllers initialized for " + userAccount.getEmail());
     }
 
-//a verifie !!!!!
-    private void receiveFile() throws IOException {
-        new Thread(() -> {
-            try {
-                // 1. Recevoir le nom du fichier et sa taille
-                String fileName = dis.readUTF();
-                long fileSize = dis.readLong();
-
-                // 2. Créer un fichier local pour stocker les données reçues
-                File file = new File("received_" + fileName);
-                try (FileOutputStream fos = new FileOutputStream(file)) {
-                    // Recevoir le fichier par morceaux
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    long totalBytesRead = 0;
-                    while (totalBytesRead < fileSize) {
-                        bytesRead = dis.read(buffer, 0, buffer.length);
-                        totalBytesRead += bytesRead;
-                        fos.write(buffer, 0, bytesRead);
-                    }
-
-                    dos.writeUTF("Fichier reçu avec succès : " + file.getAbsolutePath());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    dos.writeUTF("Échec de la réception du fichier.");
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }).start();
-    }
-
-
-    private void showMainMenu() throws IOException {
-        this.dos.writeUTF("\n====== Menu Principal ======\n");
-        this.dos.writeUTF("a. S'inscrire\n");
-        this.dos.writeUTF("b. Se connecter\n");
-        this.dos.writeUTF("============================\n");
-        this.dos.writeUTF("Veuillez entrer votre choix :");
-    }
-
-
-    private boolean login(String email, String password) {
+    private void postAuthenticationTasks() {
+        if (userAccount == null) return;
+        String emailLower = userAccount.getEmail().toLowerCase();
         try {
-            ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
-            if (rs.next()) {
-                dos.writeUTF("Connexion réussie");
-                userAccount = new User(rs.getInt("user_id"), rs.getString("name"), rs.getString("email"), rs.getString("password"));
-                userDAO.setUserOnlineStatus(userAccount.getId(), true);
-                mapDos.put(email, dos); // Ajouter l'utilisateur à la Map des utilisateurs connectés
-                return true;
-            }
-            dos.writeUTF("Échec de la connexion");
-            return false;
-        } catch (SQLException | IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    private boolean register(String name, String email, String password, String confirmPassword) {
-        try {
-            if (name.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
-                dos.writeUTF("Tous les champs doivent être remplis.");
-                return false;
-            }
-            if (!isValidEmail(email)) {
-                dos.writeUTF("Format d'email invalide.");
-                return false;
-            }
-            if (!isValidPassword(password)) {
-                dos.writeUTF("Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre.");
-                return false;
-            }
-            if (!password.equals(confirmPassword)) {
-                dos.writeUTF("Les mots de passe ne correspondent pas.");
-                return false;
-            }
-            if (userDAO.userExists(email)) {
-                dos.writeUTF("Email déjà utilisé");
-                return false;
-            }
-            if (userDAO.insertUser(name, email, password, confirmPassword)) {
-                ResultSet rs = userDAO.getUserByEmailAndPassword(email, password);
-                if (rs.next()) {
-                    userAccount = new User(rs.getInt("user_id"), rs.getString("name"), rs.getString("email"), rs.getString("password"));
-                    dos.writeUTF("Inscription réussie");
-                    userDAO.setUserOnlineStatus(userAccount.getId(), true);
-                    mapDos.put(email, dos); // Ajouter l'utilisateur à la Map des utilisateurs connectés
-                    return true;
-                }
-            }
+            onlineUserStreams.put(emailLower, dos);
+            userDAO.setUserOnlineStatus(userAccount.getId(), true);
+            System.out.println(AnsiColors.GRAY+"[POST-AUTH] "+userAccount.getEmail()+" map/DB updated."+AnsiColors.RESET);
+            boolean hasNew = receiveAndDeletePendingNotifications();
+            // if (!hasNew) menuView.sendFeedback("No new offline messages.", AnsiColors.GREEN); // Optionnel
+            // menuView.sendFeedback("Welcome " + userAccount.getName() + "!", AnsiColors.GREEN); // Optionnel
         } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-
-    private boolean isValidEmail(String email) {
-        return email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-
-    private boolean isValidPassword(String password) {
-        return password.length() >= 8 &&
-                password.matches(".*[A-Z].*") &&
-                password.matches(".*[a-z].*") &&
-                password.matches(".*[0-9].*");
-    }
-
-
-    private void userMenu() throws IOException {
-        String choice;
-        do {
-            dos.writeUTF("\n====== Menu Utilisateur ======\n");
-            dos.writeUTF("1. Gestion des Contacts\n");
-            dos.writeUTF("2. Gestion des Messages\n");
-            dos.writeUTF("3. Gestion des Groupes\n");
-            dos.writeUTF("4. Mettre à jour le profil\n");
-            dos.writeUTF("5. Se déconnecter\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :\n");
-
-            choice = dis.readLine();
-            switch (choice) {
-                case "1":
-                    contactMenu();
-                    break;
-                case "2":
-                    messageMenu();
-                    break;
-                case "3":
-                    groupMenu();
-                    break;
-                case "4":
-                    updateProfile();
-                    break;
-                case "5":
-                    logout();
-                    break;
-                default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
-            }
-        } while (!choice.equals("5"));
-    }
-
-
-
-    private void contactMenu() throws IOException {
-        String choice;
-        do {
-            dos.writeUTF("\n====== Menu Contacts ======\n");
-            dos.writeUTF("a. Ajouter un contact\n");
-            dos.writeUTF("b. Supprimer un contact\n");
-            dos.writeUTF("c. Modifier le surnom\n");
-            dos.writeUTF("d. Lister les contacts\n");
-            dos.writeUTF("e. Retour au menu principal\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
-
-            choice = dis.readLine();
-            switch (choice) {
-                case "a":
-                    handleAddContact();
-                    break;
-                case "b":
-                    handleDeleteContact();
-                    break;
-                case "c":
-                    handleUpdateNickname();
-                    break;
-                case "d":
-                    handleListContacts();
-                    break;
-                case "e":
-                    break;
-                default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
-            }
-        } while (!choice.equals("e"));
-    }
-
-
-
-    private void messageMenu() throws IOException {
-        String choice;
-        do {
-            dos.writeUTF("\n====== Menu Messages ======\n");
-            dos.writeUTF("a. Envoyer un message\n");
-            dos.writeUTF("b. Envoyer un fichier\n");  // Nouvelle option
-            dos.writeUTF("c. Voir la conversation\n");
-            dos.writeUTF("d. Retour au menu principal\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
-
-            choice = dis.readLine();
-            switch (choice) {
-                case "a":
-                    sendUserMessage();
-                    break;
-                case "b":
-                    sendFile();  // Nouvelle méthode pour envoyer un fichier
-                    break;
-                case "c":
-                    displayConversation();
-                    break;
-                case "d":
-                    break;
-                default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
-            }
-        } while (!choice.equals("d"));
-    }
-
-
-
-    private void groupMenu() throws IOException {
-        String choice;
-        do {
-            dos.writeUTF("\n====== Menu Groupes ======\n");
-            dos.writeUTF("a. Créer un groupe\n");
-            dos.writeUTF("b. Rejoindre un groupe\n");
-            dos.writeUTF("c. Ajouter un membre à un groupe\n");
-            dos.writeUTF("d. Supprimer un membre d'un groupe\n");
-            dos.writeUTF("e. Afficher les groupes disponibles\n");
-            dos.writeUTF("f. Envoyer un message à un groupe\n");
-            dos.writeUTF("g. Retour au menu principal\n");
-            dos.writeUTF("==============================\n");
-            dos.writeUTF("Veuillez entrer votre choix :");
-
-            choice = dis.readLine();
-            switch (choice) {
-                case "a":
-                    createGroup();
-                    break;
-                case "b":
-                    joinGroup();
-                    break;
-                case "c":
-                    addMemberToGroup();
-                    break;
-                case "d":
-                    removeMemberFromGroup();
-                    break;
-                case "e":
-                    displayUserGroups();
-                    break;
-                case "f":
-                    sendGroupMessage();
-                    break;
-                case "g":
-                    break;
-                default:
-                    dos.writeUTF("Choix invalide, veuillez réessayer");
-            }
-        } while (!choice.equals("g"));
-    }
-
-
-    private void removeMemberFromGroup() throws IOException {
-        dos.writeUTF("Entrez le nom du groupe :");
-        String groupName = dis.readLine();
-        int groupId = groupDAO.getGroupIdByName(groupName);
-        if (groupId == -1) {
-            dos.writeUTF("Groupe introuvable !");
-            return;
-        }
-
-        if (!groupDAO.isGroupAdmin(userAccount.getId(), groupId)) {
-            dos.writeUTF("Vous n'êtes pas l'administrateur de ce groupe.");
-            return;
-        }
-
-        dos.writeUTF("Entrez l'email de l'utilisateur à supprimer :");
-        String email = dis.readLine();
-        int userId = userDAO.getUserIdByEmail(email);
-        if (userId == -1) {
-            dos.writeUTF("Utilisateur introuvable !");
-            return;
-        }
-
-        boolean success = groupDAO.removeUserFromGroup(userId, groupId);
-        dos.writeUTF(success ? "Utilisateur supprimé du groupe avec succès." : "Échec de la suppression de l'utilisateur du groupe.");
-
-        String recipientEmail = userDAO.getEmailById(userId);
-        if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
-            DataOutputStream recipientDos = mapDos.get(recipientEmail);
-            try {
-                recipientDos.writeUTF("Vous avez été supprimé du groupe " + groupName + " par l'administrateur.");
-                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            System.err.println(AnsiColors.RED+"[POST-AUTH ERROR] for "+userAccount.getEmail()+": "+e.getMessage()+AnsiColors.RESET);
+            try { menuView.sendFeedback("Erreur serveur post-connexion.", AnsiColors.RED); } catch (IOException ignored) {}
+            this.Auth = false; errorCleanup();
         }
     }
-
-
-    private void displayUserGroups() throws IOException {
-        List<Group> groups = groupDAO.getGroupsForUser(userAccount.getId());
-        if (groups.isEmpty()) {
-            dos.writeUTF("Vous n'êtes membre d'aucun groupe.");
-        } else {
-            dos.writeUTF("Groupes dont vous êtes membre :");
-            for (Group group : groups) {
-                dos.writeUTF("Nom : " + group.getName() + ", Description : " + group.getDescription());
-            }
-        }
-    }
-
-
-    private void addMemberToGroup() throws IOException {
-        dos.writeUTF("Entrez le nom du groupe :");
-        String groupName = dis.readLine();
-        int groupId = groupDAO.getGroupIdByName(groupName);
-        if (groupId == -1) {
-            dos.writeUTF("Groupe introuvable !");
-            return;
-        }
-
-
-        if (!groupDAO.isGroupAdmin(userAccount.getId(), groupId)) {
-            dos.writeUTF("Vous n'êtes pas l'administrateur de ce groupe.");
-            return;
-        }
-
-        dos.writeUTF("Entrez l'email de l'utilisateur à ajouter :");
-        String email = dis.readLine();
-        int userId = userDAO.getUserIdByEmail(email);
-        if (userId == -1) {
-            dos.writeUTF("Utilisateur introuvable !");
-            return;
-        }
-
-        boolean success = groupDAO.addUserToGroup(userId, groupId);
-        dos.writeUTF(success ? "Utilisateur ajouté au groupe avec succès." : "Échec de l'ajout de l'utilisateur au groupe.");
-
-        String recipientEmail = userDAO.getEmailById(userId);
-        if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
-            DataOutputStream recipientDos = mapDos.get(recipientEmail);
-            try {
-                recipientDos.writeUTF("Vous avez été ajouté au groupe " + groupName + " par l'administrateur.");
-                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-
-    private void joinGroup() throws IOException {
-        dos.writeUTF("Entrez le nom du groupe :");
-        String groupName = dis.readLine();
-        int groupId = groupDAO.getGroupIdByName(groupName);
-        if (groupId == -1) {
-            dos.writeUTF("Groupe introuvable !");
-            return;
-        }
-
-        boolean success = groupDAO.addUserToGroup(userAccount.getId(), groupId);
-        dos.writeUTF(success ? "Vous avez rejoint le groupe avec succès." : "Échec de la jonction au groupe.");
-    }
-
-
-
-    private void sendFile() throws IOException {
-        this.dos.writeUTF("Entrez le surnom du destinataire :");
-        String nickname = this.dis.readLine();
-
-        int recipientUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
-        if (recipientUserId == -1) {
-            this.dos.writeUTF("Utilisateur introuvable !");
-            return;
-        }
-
-        if (!contactDAO.areContacts(userAccount.getId(), recipientUserId)) {
-            this.dos.writeUTF("Le destinataire n'est pas dans votre liste de contacts.");
-            this.dos.writeUTF("Souhaitez-vous ajouter ce contact ? (oui/non)");
-            String response = this.dis.readLine();
-            if (response.equalsIgnoreCase("oui")) {
-                handleAddContact();
-                return;
-            } else {
-                this.dos.writeUTF("Retour au menu principal.");
-                return;
-            }
-        }
-
-        this.dos.writeUTF("Entrez le chemin complet du fichier à envoyer :");
-        String filePath = this.dis.readLine();
-
-        File file = new File(filePath);
-        if (!file.exists()) {
-            this.dos.writeUTF("Fichier introuvable !");
-            return;
-        }
-
-        int messageId = messageDAO.insertFileMessage(userAccount.getId(), recipientUserId, file.getName());
-        if (messageId == -1) {
-            this.dos.writeUTF("Erreur : Impossible d'enregistrer le message de fichier.");
-            return;
-        }
-
-        try (FileInputStream fis = new FileInputStream(file)) {
-            this.dos.writeUTF(file.getName());
-            this.dos.writeLong(file.length());
-
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = fis.read(buffer)) != -1) {
-                this.dos.write(buffer, 0, bytesRead);
-            }
-
-            this.dos.writeUTF("Fichier envoyé avec succès.");
-        } catch (IOException e) {
-            e.printStackTrace();
-            this.dos.writeUTF("Échec de l'envoi du fichier.");
-        }
-
-        String recipientEmail = userDAO.getEmailById(recipientUserId);
-        if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
-            DataOutputStream recipientDos = mapDos.get(recipientEmail);
-            try {
-                recipientDos.writeUTF("Nouveau fichier de " + userAccount.getEmail() + " : " + file.getName());
-                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        } else {
-            boolean pendingStored = messageDAO.storePendingMessage(recipientUserId, messageId);
-            if (pendingStored) {
-                this.dos.writeUTF("Le destinataire est déconnecté. Le fichier sera délivré à sa reconnexion.");
-            } else {
-                this.dos.writeUTF("Échec de l'enregistrement du fichier en attente.");
-            }
-        }
-    }
-
-
-    private void displayConversation() throws IOException {
-        dos.writeUTF("Entrez le surnom du contact pour voir la conversation :");
-        String nickname = dis.readLine();
-
-        int contactUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
-        if (contactUserId == -1) {
-            dos.writeUTF("Contact introuvable !");
-            return;
-        }
-
-        List<Message> messages = messageDAO.getConversation(userAccount.getId(), contactUserId);
-        String contactEmail = userDAO.getEmailById(contactUserId);
-        String status = mapDos.containsKey(contactEmail) ? "en ligne" : "hors ligne"; // Vérifie le statut
-
-        if (messages.isEmpty()) {
-            dos.writeUTF("Aucun message trouvé avec " + nickname + " (" + status + ").");
-        } else {
-            // Afficher les messages de la conversation
-            for (Message msg : messages) {
-                dos.writeUTF("De " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
-            }
-        }
-    }
-
-
-    private void sendGroupMessage() throws IOException {
-        dos.writeUTF("Entrez le nom du groupe :");
-        String groupName = dis.readLine();
-        int groupId = groupDAO.getGroupIdByName(groupName);
-        if (groupId == -1) {
-            dos.writeUTF("Groupe introuvable !");
-            return;
-        }
-
-        dos.writeUTF("Entrez votre message :");
-        String message = dis.readLine();
-
-        int messageId = messageDAO.insertGroupMessage(userAccount.getId(), groupId, message);
-        if (messageId == -1) {
-            dos.writeUTF("Erreur : Impossible d'enregistrer le message.");
-            return;
-        }
-
-        List<Integer> memberIds = groupDAO.getGroupMembers(groupId);
-        for (int memberId : memberIds) {
-            String recipientEmail = userDAO.getEmailById(memberId);
-            if (recipientEmail != null && mapDos.containsKey(recipientEmail)) {
-                DataOutputStream recipientDos = mapDos.get(recipientEmail);
-                try {
-                    recipientDos.writeUTF("Nouveau message dans le groupe " + groupName + " de " + userAccount.getEmail() + " : " + message);
-                    SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } else {
-                boolean pendingStored = messageDAO.storePendingMessage(memberId, messageId);
-                if (pendingStored) {
-                    dos.writeUTF("Le message sera délivré à la reconnexion des membres hors ligne.");
-                } else {
-                    dos.writeUTF("Échec de l'enregistrement du message en attente.");
-                }
-            }
-        }
-        dos.writeUTF("Message envoyé au groupe avec succès.");
-    }
-    private void handleAddContact() throws IOException {
-        dos.writeUTF("Entrez l'email du contact :");
-        String email = dis.readLine();
-        int contactUserId = userDAO.getUserIdByEmail(email);
-        if (contactUserId == -1) {
-            dos.writeUTF("Utilisateur introuvable !");
-            return;
-        }
-        dos.writeUTF("Entrez un surnom (optionnel) :");
-        String nickname = dis.readLine();
-        boolean success = contactDAO.addContact(userAccount.getId(), contactUserId, nickname);
-        dos.writeUTF(success ? "Contact ajouté !" : "Échec de l'ajout");
-    }
-
-
-
-    private void handleDeleteContact() throws IOException {
-        dos.writeUTF("Entrez l'email du contact à supprimer :");
-        String email = dis.readLine();
-        int contactUserId = userDAO.getUserIdByEmail(email);
-        if (contactUserId == -1) {
-            dos.writeUTF("Aucun utilisateur trouvé avec cet email");
-            return;
-        }
-        boolean success = contactDAO.deleteContact(userAccount.getId(), contactUserId);
-        dos.writeUTF(success ? "Contact supprimé avec succès" : "Erreur lors de la suppression");
-    }
-
-
-
-    private void handleUpdateNickname() throws IOException {
-        dos.writeUTF("Entrez l'email du contact :");
-        String email = dis.readLine();
-        int contactUserId = userDAO.getUserIdByEmail(email);
-        if (contactUserId == -1) {
-            dos.writeUTF("Contact introuvable");
-            return;
-        }
-        dos.writeUTF("Entrez le nouveau surnom :");
-        String newNickname = dis.readLine();
-        boolean success = contactDAO.updateNickname(userAccount.getId(), contactUserId, newNickname);
-        dos.writeUTF(success ? "Surnom mis à jour" : "Échec de la mise à jour");
-    }
-
-    private void handleListContacts() throws IOException {
-        List<Contact> contacts = contactDAO.getContacts(userAccount.getId());
-        if (contacts.isEmpty()) {
-            dos.writeUTF("📭 Aucun contact trouvé");
-            return;
-        }
-        StringBuilder sb = new StringBuilder("Liste des contacts :\n");
-        for (Contact contact : contacts) {
-            String email = userDAO.getEmailById(contact.getContactUserId());
-            String status = mapDos.containsKey(email) ? "en ligne" : "hors ligne"; // Vérifie le statut
-            sb.append("➤ ").append(contact.getNickname() != null ? contact.getNickname() : email)
-                    .append(" (").append(status).append(")")
-                    .append("\n");
-        }
-        dos.writeUTF(sb.toString());
-    }
-
-
-
-    private void sendUserMessage() throws IOException {
-        this.dos.writeUTF("Entrez le surnom du destinataire :");
-        String nickname = this.dis.readLine();
-
-        int recipientUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
-        if (recipientUserId == -1) {
-            this.dos.writeUTF("Utilisateur introuvable !");
-            return;
-        }
-
-        if (!contactDAO.areContacts(userAccount.getId(), recipientUserId)) {
-            this.dos.writeUTF("Le destinataire n'est pas dans votre liste de contacts.");
-            this.dos.writeUTF("Souhaitez-vous ajouter ce contact ? (oui/non)");
-            String response = this.dis.readLine();
-            if (response.equalsIgnoreCase("oui")) {
-                handleAddContact();
-                return;
-            } else {
-                this.dos.writeUTF("Retour au menu principal.");
-                return;
-            }
-        }
-
-        this.dos.writeUTF("Entrez votre message :");
-        String message = this.dis.readLine();
-
-        int messageId = messageDAO.insertMessage(userAccount.getId(), recipientUserId, message);
-        if (messageId == -1) {
-            this.dos.writeUTF("Erreur : Impossible d'enregistrer le message.");
-            return;
-        }
-
-        String recipientEmail = userDAO.getEmailById(recipientUserId);
-        if (recipientEmail == null) {
-            this.dos.writeUTF("Erreur : Impossible de récupérer l'email du destinataire.");
-            return;
-        }
-
-        if (mapDos.containsKey(recipientEmail)) {
-            DataOutputStream recipientDos = mapDos.get(recipientEmail);
-            try {
-                recipientDos.writeUTF("Nouveau message de " + userAccount.getEmail() + " : " + message);
-                this.dos.writeUTF("Message envoyé avec succès.");
-
-                SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
-            } catch (IOException e) {
-                e.printStackTrace();
-                this.dos.writeUTF("Échec de l'envoi du message.");
-            }
-        } else {
-            boolean pendingStored = messageDAO.storePendingMessage(recipientUserId, messageId);
-            if (pendingStored) {
-                this.dos.writeUTF("Le destinataire est déconnecté. Le message sera délivré à sa reconnexion.");
-            } else {
-                this.dos.writeUTF("Échec de l'enregistrement du message en attente.");
-            }
-        }
-    }
-
-
-    private void receiveAndDeleteMessages() {
-        try {
-            var messages = messageDAO.getPendingMessagesForUser(userAccount.getId());
-            System.out.println(userAccount.getId());
-            System.out.println("Messages en attente récupérés : " + messages.size()); // Debugging line
-            if (messages.isEmpty()) {
-                dos.writeUTF("Aucun nouveau message.");
-            } else {
-                for (var msg : messages) {
-                    if ("file".equals(msg.getMessageType())) {
-                        dos.writeUTF("Nouveau fichier de " + msg.getSenderEmail() + " : " + msg.getFileName());
-                    } else {
-                        dos.writeUTF("Nouveau message de " + msg.getSenderEmail() + " à " + msg.getDate() + " : " + msg.getMessage());
-                    }
-                    SoundPlayer.playSound("C:\\\\Users\\\\Lenovo\\\\IdeaProjects\\\\ChatApplication\\\\src\\\\utils\\\\notif.wav");
-                }
-                messageDAO.deletePendingMessagesForUser(userAccount.getId());
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-    private void createGroup() throws IOException {
-        dos.writeUTF("Entrez le nom du groupe :");
-        String name = dis.readLine();
-        dos.writeUTF("Entrez la description du groupe :");
-        String description = dis.readLine();
-        if (groupDAO.createGroup(name, description, userAccount.getId())) {
-            dos.writeUTF("Groupe créé avec succès.");
-        } else {
-            dos.writeUTF("Échec de la création du groupe.");
-        }
-    }
-
-
-
-    private void updateProfile() throws IOException {
-        dos.writeUTF("Entrez votre nouveau nom :");
-        String newName = dis.readLine();
-        dos.writeUTF("Entrez votre nouvel email :");
-        String newEmail = dis.readLine();
-        dos.writeUTF("Entrez votre nouveau mot de passe :");
-        String newPassword = dis.readLine();
-        userAccount.updateProfile(newEmail, newPassword, newName);
-        dos.writeUTF("Profil mis à jour avec succès !");
-    }
-
 
     private void logout() {
-        try {
-            dos.writeUTF("Déconnexion en cours...");
-            Auth = false;
-            if (userAccount != null) {
-                mapDos.remove(userAccount.getEmail()); // Retirer l'utilisateur de la Map
-                userDAO.setUserOnlineStatus(userAccount.getId(), false);
-            }
-            dis.close();
-            dos.close();
-            commthread.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        String userEmail = getClientIdentifier(); // Utilise la méthode pour l'email ou l'adresse
+        System.out.println(AnsiColors.BLUE + "[LOGOUT] " + userEmail + " initiated." + AnsiColors.RESET);
+        try { dos.writeUTF(AnsiColors.ANSI_CLS + AnsiColors.GREEN + "Déconnexion..." + AnsiColors.RESET); dos.flush(); } catch (IOException e) { /* Ignore */ }
+        this.Auth = false;
+        errorCleanup(); // Déclenche le nettoyage map/bdd/notifs
+    }
+
+    private void errorCleanup() {
+        String clientDesc = getClientIdentifier();
+        System.out.println(AnsiColors.YELLOW + "Error/logout cleanup for " + clientDesc + "..." + AnsiColors.RESET);
+        this.Auth = false;
+        if (userAccount != null) {
+            String emailLower = userAccount.getEmail().toLowerCase();
+            if (onlineUserStreams.remove(emailLower) != null) System.out.println(AnsiColors.GRAY+"[CLEANUP] Removed "+userAccount.getEmail()+" from map."+AnsiColors.RESET);
+            try { userDAO.setUserOnlineStatus(userAccount.getId(), false); System.out.println(AnsiColors.GRAY+"[CLEANUP] Set "+userAccount.getEmail()+" offline in DB."+AnsiColors.RESET); }
+            catch (Exception e) { System.err.println(AnsiColors.RED+"[CLEANUP DB ERR] "+e.getMessage()+AnsiColors.RESET); }
+            notifyContactsOfLogout();
         }
     }
 
     private void cleanup() {
-        try {
-            if (dis != null) dis.close();
-            if (dos != null) dos.close();
-            if (commthread != null && !commthread.isClosed()) commthread.close();
-            if (conn != null && !conn.isClosed()) conn.close();
-        } catch (IOException | SQLException e) {
-            e.printStackTrace();
+        String clientDesc = getClientIdentifier();
+        System.out.println(AnsiColors.GRAY + "Final cleanup for " + clientDesc + "..." + AnsiColors.RESET);
+        try { if (dis != null) dis.close(); } catch (IOException e) { /* ignore */ }
+        try { if (dos != null) dos.close(); } catch (IOException e) { /* ignore */ }
+        try { if (commthread != null && !commthread.isClosed()) commthread.close(); } catch (IOException e) { /* ignore */ }
+        try { if (this.conn != null && !this.conn.isClosed()) { this.conn.close(); System.out.println(AnsiColors.GRAY + "[CLEANUP] DB connection closed." + AnsiColors.RESET); } }
+        catch (SQLException e) { System.err.println(AnsiColors.RED + "[CLEANUP DB CLOSE ERROR]: " + e.getMessage() + AnsiColors.RESET); }
+        System.out.println(AnsiColors.GRAY + "Cleanup finished." + AnsiColors.RESET);
+    }
+
+    private String getClientIdentifier() {
+        if (userAccount != null && userAccount.getEmail() != null) return userAccount.getEmail() + " (" + (commthread!=null?commthread.getRemoteSocketAddress():"no socket") + ")";
+        return (commthread != null ? commthread.getRemoteSocketAddress().toString() : "unknown");
+    }
+
+    private boolean receiveAndDeletePendingNotifications() throws IOException {
+        if (userAccount == null) return false;
+        boolean hasNew = false;
+        List<Message> pendingItems = messageDAO.getPendingMessagesForUser(userAccount.getId());
+        if (!pendingItems.isEmpty()) {
+            hasNew = true;
+            StringBuilder sb = new StringBuilder("\n--- Notifications Hors Ligne ---\n");
+            for (Message item : pendingItems) {
+                String time = item.getDate(); String sender = (item.getSenderEmail()!=null)?item.getSenderEmail():"ID "+item.getSenderId(); String ctx = (item.getGroupId()>0)?" (Groupe: "+getGroupNameById(item.getGroupId())+")":"";
+                if ("file".equals(item.getMessageType())) sb.append(String.format("[%s] Fichier de %s%s : '%s' (ID: %d) -> Use view/download\n", time, sender, ctx, item.getFileName(), item.getMessageId()));
+                else sb.append(String.format("[%s] Msg de %s%s : %s\n", time, sender, ctx, item.getMessage()));
+            }
+            sb.append("----------------------------\n"); dos.writeUTF(sb.toString()); dos.flush();
+            try { messageDAO.deletePendingMessagesForUser(userAccount.getId()); }
+            catch(Exception e) { System.err.println("Error deleting pending for "+userAccount.getId()+": "+e.getMessage());}
+        }
+        return hasNew;
+    }
+
+    private void notifyContactsOfLogout() {
+        if (userAccount == null) return;
+        List<Contact> contacts = contactDAO.getContacts(userAccount.getId());
+        for (Contact c : contacts) {
+            String email = userDAO.getEmailById(c.getContactUserId());
+            if (email != null) {
+                String emailLower = email.toLowerCase();
+                if (onlineUserStreams.containsKey(emailLower)) {
+                    try { onlineUserStreams.get(emailLower).writeUTF("\n[STATUS] " + userAccount.getEmail() + " est hors ligne.\n> "); onlineUserStreams.get(emailLower).flush(); }
+                    catch (IOException e) { onlineUserStreams.remove(emailLower); try{userDAO.setUserOnlineStatus(c.getContactUserId(), false);}catch(Exception dbE){}}
+                }
+            }
         }
     }
 
-
-    private void error() {
-        if (this.Auth && this.userAccount != null) {
-            this.userAccount.disconnect();
-        }
-        try {
-            this.dis.close();
-            this.dos.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        try {
-            this.commthread.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    private String getGroupNameById(int groupId) {
+        List<Group> userGroups = groupDAO.getGroupsForUser(userAccount.getId());
+        for(Group g : userGroups) { if(g.getId() == groupId) return g.getName(); }
+        return "Groupe ID " + groupId;
     }
+
 }

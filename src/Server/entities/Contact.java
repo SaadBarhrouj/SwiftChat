@@ -1,4 +1,4 @@
-package Entities;
+package Server.entities;
 
 public class Contact {
 
