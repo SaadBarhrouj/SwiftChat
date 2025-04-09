@@ -1,22 +1,17 @@
 package Server;
 
-import Server.controllers.*; // Importer les nouveaux contrôleurs
+import Server.controllers.*;
 import Server.dao.*;
-import Server.entities.Contact;
-import Server.entities.Group;
-import Server.entities.Message;
-import Server.entities.User;
-import Server.utils.AnsiColors;
-import Server.views.HelpView;
-import Server.views.MenuView;
+import Server.entities.*;
+import Server.utils.*;
+import Server.views.*;
 
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.format.DateTimeFormatter; // Importer à nouveau si utilisé ici
-import java.util.List; // Pour notifyContactsOfLogout
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -44,12 +39,6 @@ public class ClientHandler extends Thread {
     private ChatController chatController;
     private ProfileController profileController;
 
-    private static final String SERVER_STORAGE = "src/uploads/";
-    // Recréer les constantes si elles sont utilisées dans les méthodes restantes ici
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final String NOTIFICATION_SOUND = "src/utils/notify.wav";
-
-
     public ClientHandler(Socket s, DataInputStream diss, DataOutputStream doss) {
         this.commthread = s;
         this.dis = diss;
@@ -65,19 +54,17 @@ public class ClientHandler extends Thread {
             this.userDAO = new UserDAO(this.conn);
             this.contactDAO = new ContactDAO(this.conn);
             this.messageDAO = new MessageDAO(this.conn);
-            // Assurez-vous que MessageDAO peut recevoir UserDAO si nécessaire
-            // this.messageDAO.setUserDAO(this.userDAO);
             this.groupDAO = new GroupDAO(this.conn);
             System.out.println("--> DAOs initialized.");
 
             this.menuView = new MenuView(this.dis, this.dos);
-            this.helpView = new HelpView(this.dos, this.menuView);
+            this.helpView = new HelpView(this.dos);
             System.out.println("--> Views initialized.");
 
             this.authController = new AuthenticationController(dis, dos, userDAO, menuView, helpView, onlineUserStreams);
             System.out.println("--> AuthController initialized.");
 
-            File storageDir = new File(SERVER_STORAGE);
+            File storageDir = new File(AppPaths.SERVER_UPLOADS_DIR);
             if (!storageDir.exists() && !storageDir.mkdirs()) { throw new IOException("Failed to create storage directory."); }
             if (!storageDir.isDirectory() || !storageDir.canWrite()) { throw new IOException("Storage directory invalid/unwritable."); }
             System.out.println("--> Storage directory verified.");
@@ -156,7 +143,7 @@ public class ClientHandler extends Thread {
         this.chatController = new ChatController(dis, dos, messageDAO, contactDAO, userDAO, groupDAO, menuView, helpView, userAccount, onlineUserStreams);
         this.groupController = new GroupController(dis, dos, groupDAO, userDAO, messageDAO, menuView, helpView, userAccount, onlineUserStreams);
         this.profileController = new ProfileController(dis, dos, userDAO, menuView, userAccount, onlineUserStreams);
-        this.groupController.setChatController(this.chatController); // Injection
+        this.groupController.setChatController(this.chatController);
         System.out.println("--> Post-auth controllers initialized for " + userAccount.getEmail());
     }
 
@@ -168,8 +155,8 @@ public class ClientHandler extends Thread {
             userDAO.setUserOnlineStatus(userAccount.getId(), true);
             System.out.println(AnsiColors.GRAY+"[POST-AUTH] "+userAccount.getEmail()+" map/DB updated."+AnsiColors.RESET);
             boolean hasNew = receiveAndDeletePendingNotifications();
-            // if (!hasNew) menuView.sendFeedback("No new offline messages.", AnsiColors.GREEN); // Optionnel
-            // menuView.sendFeedback("Welcome " + userAccount.getName() + "!", AnsiColors.GREEN); // Optionnel
+             if (!hasNew) menuView.sendFeedback("No new offline messages.", AnsiColors.GREEN);
+             menuView.sendFeedback("Welcome " + userAccount.getName() + "!", AnsiColors.GREEN);
         } catch (Exception e) {
             System.err.println(AnsiColors.RED+"[POST-AUTH ERROR] for "+userAccount.getEmail()+": "+e.getMessage()+AnsiColors.RESET);
             try { menuView.sendFeedback("Erreur serveur post-connexion.", AnsiColors.RED); } catch (IOException ignored) {}
@@ -178,11 +165,11 @@ public class ClientHandler extends Thread {
     }
 
     private void logout() {
-        String userEmail = getClientIdentifier(); // Utilise la méthode pour l'email ou l'adresse
+        String userEmail = getClientIdentifier();
         System.out.println(AnsiColors.BLUE + "[LOGOUT] " + userEmail + " initiated." + AnsiColors.RESET);
-        try { dos.writeUTF(AnsiColors.ANSI_CLS + AnsiColors.GREEN + "Déconnexion..." + AnsiColors.RESET); dos.flush(); } catch (IOException e) { /* Ignore */ }
+        try { dos.writeUTF(AnsiColors.ANSI_CLS + AnsiColors.GREEN + "Deconnexion..." + AnsiColors.RESET); dos.flush(); } catch (IOException e) { /* Ignore */ }
         this.Auth = false;
-        errorCleanup(); // Déclenche le nettoyage map/bdd/notifs
+        errorCleanup();
     }
 
     private void errorCleanup() {
@@ -220,7 +207,7 @@ public class ClientHandler extends Thread {
         List<Message> pendingItems = messageDAO.getPendingMessagesForUser(userAccount.getId());
         if (!pendingItems.isEmpty()) {
             hasNew = true;
-            StringBuilder sb = new StringBuilder("\n--- Notifications Hors Ligne ---\n");
+            StringBuilder sb = new StringBuilder("\n--- Notifications offLine ---\n");
             for (Message item : pendingItems) {
                 String time = item.getDate(); String sender = (item.getSenderEmail()!=null)?item.getSenderEmail():"ID "+item.getSenderId(); String ctx = (item.getGroupId()>0)?" (Groupe: "+getGroupNameById(item.getGroupId())+")":"";
                 if ("file".equals(item.getMessageType())) sb.append(String.format("[%s] Fichier de %s%s : '%s' (ID: %d) -> Use view/download\n", time, sender, ctx, item.getFileName(), item.getMessageId()));
@@ -251,7 +238,7 @@ public class ClientHandler extends Thread {
     private String getGroupNameById(int groupId) {
         List<Group> userGroups = groupDAO.getGroupsForUser(userAccount.getId());
         for(Group g : userGroups) { if(g.getId() == groupId) return g.getName(); }
-        return "Groupe ID " + groupId;
+        return "Group ID " + groupId;
     }
 
 }

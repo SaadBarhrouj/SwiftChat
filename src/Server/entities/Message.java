@@ -28,7 +28,7 @@ public class Message {
         return senderId;
     }
 
-    public int getMessageId() {
+    public Object getMessageId() {
         return messageId;
     }
 
@@ -53,14 +53,11 @@ public class Message {
     }
 
     public String getDate() {
-        // Retourne seulement l'heure (HH:mm:ss) au lieu de la date complète
-        // Ajoutons une vérification pour éviter les erreurs si la date est nulle ou trop courte
-        if (date != null && date.length() >= 19) { // Suppose un format comme "YYYY-MM-DD HH:mm:ss"
-            return date.substring(11, 19); // Extrait HH:mm:ss
-        } else if (date != null && date.matches("\\(\\d{2}:\\d{2}:\\d{2}\\)")) { // Si le format est (HH:mm:ss) comme vu dans le code serveur
+        if (date != null && date.length() >= 19) {//2024-04-09T13:45:22 // format ISO 8601
+            return date.substring(11, 19);
+        } else if (date != null && date.matches("\\(\\d{2}:\\d{2}:\\d{2}\\)")) {
             return date.substring(1, 9);
         }
-        // Retourne la chaîne originale ou une chaîne vide si le format n'est pas reconnu
         return (date != null) ? date : "";
     }
 

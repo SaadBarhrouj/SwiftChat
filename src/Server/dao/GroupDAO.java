@@ -29,33 +29,29 @@ public class GroupDAO {
         }
         return groups;
     }
+
+
     public boolean createGroup(String name, String description, int adminId) {
         String sqlGroup = "INSERT INTO Groupe (groupe_name, groupe_description, Groupe_admin_id) VALUES (?, ?, ?)";
         String sqlUserGroup = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
 
         try (PreparedStatement pstmtGroup = conn.prepareStatement(sqlGroup, Statement.RETURN_GENERATED_KEYS);
              PreparedStatement pstmtUserGroup = conn.prepareStatement(sqlUserGroup)) {
-
-
             conn.setAutoCommit(false);
-
-
             pstmtGroup.setString(1, name);
             pstmtGroup.setString(2, description);
             pstmtGroup.setInt(3, adminId);
             int affectedRows = pstmtGroup.executeUpdate();
 
             if (affectedRows == 0) {
-                throw new SQLException("La création du groupe a échoué, aucune ligne affectée.");
+                throw new SQLException("Creation of group failed.");
             }
-
-
             int groupId;
             try (ResultSet generatedKeys = pstmtGroup.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
                     groupId = generatedKeys.getInt(1);
                 } else {
-                    throw new SQLException("La création du groupe a échoué, aucun ID obtenu.");
+                    throw new SQLException("Creation of group failed.");
                 }
             }
 
@@ -83,6 +79,8 @@ public class GroupDAO {
             }
         }
     }
+
+
     public boolean removeUserFromGroup(int userId, int groupId) {
         String query = "DELETE FROM users_groups WHERE user_id = ? AND group_id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
@@ -108,6 +106,7 @@ public class GroupDAO {
             return false;
         }
     }
+
     public boolean addUserToGroup(int userId, int groupId) {
         String sql = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -135,6 +134,8 @@ public class GroupDAO {
         }
         return -1;
     }
+
+
     public List<Integer> getGroupMembers(int groupId) {
         List<Integer> memberIds = new ArrayList<>();
         String query = "SELECT user_id FROM users_groups WHERE group_id = ?";

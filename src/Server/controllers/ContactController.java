@@ -1,17 +1,11 @@
 package Server.controllers;
 
-import Server.dao.ContactDAO;
-import Server.dao.UserDAO;
-import Server.entities.Contact;
-import Server.entities.User;
-import Server.utils.AnsiColors;
-import Server.utils.ValidationUtils;
-import Server.views.MenuView;
+import Server.dao.*;
+import Server.entities.*;
+import Server.utils.*;
+import Server.views.*;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
-import java.io.IOException;
+import java.io.*;
 import java.net.SocketException;
 import java.util.List;
 import java.util.Map;
@@ -60,92 +54,91 @@ public class ContactController {
     }
 
     private void addContact() throws IOException {
-        dos.writeUTF("\nEmail du contact à ajouter:"); dos.flush();
+        dos.writeUTF("\nEmail of contact to add:"); dos.flush();
         String email = dis.readUTF();
-        if (email == null || !ValidationUtils.isValidEmail(email.trim())) { menuView.sendFeedback("Format d'email invalide.", AnsiColors.RED); return; }
+        if (email == null || !ValidationUtils.isValidEmail(email.trim())) { menuView.sendFeedback("Format of email incorrect.", AnsiColors.RED); return; }
         email = email.trim().toLowerCase();
 
-        if (email.equalsIgnoreCase(userAccount.getEmail())) { menuView.sendFeedback("Vous ne pouvez pas vous ajouter.", AnsiColors.YELLOW); return; }
+        if (email.equalsIgnoreCase(userAccount.getEmail())) { menuView.sendFeedback("You cannot add.", AnsiColors.YELLOW); return; }
 
         int contactUserId = userDAO.getUserIdByEmail(email);
-        if (contactUserId == -1) { menuView.sendFeedback("Utilisateur '" + email + "' non trouvé.", AnsiColors.RED); return; }
+        if (contactUserId == -1) { menuView.sendFeedback("User '" + email + "' not found.", AnsiColors.RED); return; }
 
-        // ***** UTILISATION DE LA NOUVELLE MÉTHODE DAO *****
         if(contactDAO.doesSpecificContactExist(userAccount.getId(), contactUserId)) {
-            menuView.sendFeedback("Vous avez déjà ajouté '" + email + "' comme contact.", AnsiColors.YELLOW);
+            menuView.sendFeedback("You have already add '" + email + "' as contact.", AnsiColors.YELLOW);
             return;
         }
-        // ***** FIN MODIFICATION *****
-
-        dos.writeUTF("Surnom pour '" + email + "':"); dos.flush();
+        dos.writeUTF("Nickname for '" + email + "':"); dos.flush();
         String nickname = dis.readUTF();
-        if (nickname == null || nickname.trim().isEmpty()) { menuView.sendFeedback("Le surnom ne peut pas être vide.", AnsiColors.RED); return; }
+        if (nickname == null || nickname.trim().isEmpty()) { menuView.sendFeedback("Nickname couldn't be empty.", AnsiColors.RED); return; }
         nickname = nickname.trim();
 
-        if (contactDAO.getUserIdByNickname(userAccount.getId(), nickname) != -1) { menuView.sendFeedback("Surnom '" + nickname + "' déjà pris.", AnsiColors.RED); return; }
+        if (contactDAO.getUserIdByNickname(userAccount.getId(), nickname) != -1) { menuView.sendFeedback("Nickname '" + nickname + "' already used.", AnsiColors.RED); return; }
 
         boolean success = contactDAO.addContact(userAccount.getId(), contactUserId, nickname);
-        if (success) menuView.sendFeedback("Contact '" + nickname + "' (" + email + ") ajouté !", AnsiColors.GREEN);
-        else menuView.sendFeedback("Échec ajout contact.", AnsiColors.RED);
+        if (success) menuView.sendFeedback("Contact '" + nickname + "' (" + email + ") added !", AnsiColors.GREEN);
+        else menuView.sendFeedback("Failed adding contact.", AnsiColors.RED);
     }
 
     private void deleteContact() throws IOException {
-        dos.writeUTF("\nSurnom EXACT du contact à supprimer:"); dos.flush();
+        dos.writeUTF("\nNickname of contact to delete:"); dos.flush();
         String nickname = dis.readUTF();
-        if (nickname == null || nickname.trim().isEmpty()) { menuView.sendFeedback("Surnom invalide.", AnsiColors.RED); return; }
+        if (nickname == null || nickname.trim().isEmpty()) { menuView.sendFeedback("Nickname incorrect.", AnsiColors.RED); return; }
         nickname = nickname.trim();
 
         int contactUserId = contactDAO.getUserIdByNickname(userAccount.getId(), nickname);
-        if (contactUserId == -1) { menuView.sendFeedback("Surnom '" + nickname + "' non trouvé.", AnsiColors.RED); return; }
+        if (contactUserId == -1) { menuView.sendFeedback("Nickname '" + nickname + "' not found.", AnsiColors.RED); return; }
 
-        dos.writeUTF(AnsiColors.YELLOW + "Supprimer '" + nickname + "'? (oui/non):" + AnsiColors.RESET); dos.flush();
+        dos.writeUTF(AnsiColors.YELLOW + "Delete '" + nickname + "'? (yes/no):" + AnsiColors.RESET); dos.flush();
         String confirmation = dis.readUTF();
-        if (confirmation == null || !confirmation.trim().equalsIgnoreCase("oui")) { menuView.sendFeedback("Suppression annulée.", AnsiColors.BLUE); return; }
+        if (confirmation == null || !confirmation.trim().equalsIgnoreCase("yes")) { menuView.sendFeedback("Deleted canceled.", AnsiColors.BLUE); return; }
 
         boolean success = contactDAO.deleteContact(userAccount.getId(), contactUserId);
-        if(success) menuView.sendFeedback("Contact '" + nickname + "' supprimé.", AnsiColors.GREEN);
+        if(success) menuView.sendFeedback("Contact '" + nickname + "' deleted.", AnsiColors.GREEN);
         else menuView.sendFeedback("Erreur suppression.", AnsiColors.RED);
     }
 
     private void updateNickname() throws IOException {
-        dos.writeUTF("\nSurnom ACTUEL du contact:"); dos.flush();
+        dos.writeUTF("\nCurrent nickname of contact:"); dos.flush();
         String oldNickname = dis.readUTF();
-        if (oldNickname == null || oldNickname.trim().isEmpty()) { menuView.sendFeedback("Ancien surnom invalide.", AnsiColors.RED); return; }
+        if (oldNickname == null || oldNickname.trim().isEmpty()) { menuView.sendFeedback("Old nickname incorrect.", AnsiColors.RED); return; }
         oldNickname = oldNickname.trim();
 
         int contactUserId = contactDAO.getUserIdByNickname(userAccount.getId(), oldNickname);
-        if (contactUserId == -1) { menuView.sendFeedback("Contact '" + oldNickname + "' non trouvé.", AnsiColors.RED); return; }
+        if (contactUserId == -1) { menuView.sendFeedback("Contact '" + oldNickname + "' not found.", AnsiColors.RED); return; }
 
-        dos.writeUTF("Nouveau surnom:"); dos.flush();
+        dos.writeUTF("New nickname:"); dos.flush();
         String newNickname = dis.readUTF();
-        if (newNickname == null || newNickname.trim().isEmpty()) { menuView.sendFeedback("Nouveau surnom vide.", AnsiColors.RED); return; }
+        if (newNickname == null || newNickname.trim().isEmpty()) { menuView.sendFeedback("New nickname empty.", AnsiColors.RED); return; }
         newNickname = newNickname.trim();
 
-        // Vérifier si le nouveau surnom est déjà utilisé pour un AUTRE contact
+
         int existingId = contactDAO.getUserIdByNickname(userAccount.getId(), newNickname);
         if(existingId != -1 && existingId != contactUserId) {
-            menuView.sendFeedback("Le surnom '" + newNickname + "' est déjà utilisé.", AnsiColors.RED); return;
+            menuView.sendFeedback("Nickname '" + newNickname + "' already used.", AnsiColors.RED); return;
         }
 
         boolean success = contactDAO.updateNickname(userAccount.getId(), contactUserId, newNickname);
-        if(success) menuView.sendFeedback("Surnom mis à jour pour '" + newNickname + "'.", AnsiColors.GREEN);
-        else menuView.sendFeedback("Échec mise à jour.", AnsiColors.RED);
+        if(success) menuView.sendFeedback("Update of nickname '" + newNickname + "'.", AnsiColors.GREEN);
+        else menuView.sendFeedback("Error of update.", AnsiColors.RED);
     }
 
     private void listContacts() throws IOException {
-        List<Contact> contacts = contactDAO.getContacts(userAccount.getId()); // Ne liste que ceux ajoutés par moi
-        if (contacts.isEmpty()) { dos.writeUTF("\nAucun contact ajouté.\r\n"); dos.flush(); return; }
-        StringBuilder sb = new StringBuilder("\r\n--- Vos Contacts Ajoutés ---\r\n");
-        for (Contact c : contacts) {
-            String email = userDAO.getEmailById(c.getContactUserId());
-            if (email != null) {
-                String status = onlineUserStreams.containsKey(email.toLowerCase()) ? AnsiColors.GREEN+"[En ligne]" : AnsiColors.RED+"[Hors ligne]";
-                sb.append(String.format(" %s (%s) %s%n", AnsiColors.YELLOW+c.getNickname()+AnsiColors.RESET, AnsiColors.CYAN+email+AnsiColors.RESET, status+AnsiColors.RESET));
-            } else {
-                sb.append(String.format(" %s (%s) [%s]%n", AnsiColors.YELLOW+c.getNickname()+AnsiColors.RESET, AnsiColors.GRAY+"Email inconnu"+AnsiColors.RESET, AnsiColors.GRAY+"Inconnu"+AnsiColors.RESET));
+            List<Contact> contacts = contactDAO.getContacts(userAccount.getId());
+            if (contacts.isEmpty()) { dos.writeUTF("\nNo contact added.\r\n"); dos.flush(); return; }
+            StringBuilder sb = new StringBuilder("\r\n--- Your contacts ---\r\n");
+            for (Contact c : contacts) {
+                String email = userDAO.getEmailById(c.getContactUserId());
+                if (email != null) {
+                    String status = onlineUserStreams.containsKey(email.toLowerCase()) ? AnsiColors.GREEN+"[Online]" : AnsiColors.RED+"[Offline]";
+                    sb.append(String.format(" %s (%s) %s%n", AnsiColors.YELLOW+c.getNickname()+AnsiColors.RESET, AnsiColors.CYAN+email+AnsiColors.RESET, status+AnsiColors.RESET));
+                } else {
+                    sb.append(String.format(" %s (%s) [%s]%n", AnsiColors.YELLOW+c.getNickname()+AnsiColors.RESET, AnsiColors.GRAY+"Email not found"+AnsiColors.RESET, AnsiColors.GRAY+"not found"+AnsiColors.RESET));
+                }
             }
+            sb.append("-------------------------\r\n");
+            dos.writeUTF(sb.toString()); dos.flush();
         }
-        sb.append("-------------------------\r\n");
-        dos.writeUTF(sb.toString()); dos.flush();
-    }
+
+
 }

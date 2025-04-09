@@ -9,7 +9,7 @@ import Server.utils.AnsiColors;
 
 public class MenuView {
 
-    private final DataInputStream dis; // Nécessaire pour lire après un prompt
+    private final DataInputStream dis;
     private final DataOutputStream dos;
 
     public MenuView(DataInputStream dis, DataOutputStream dos) {
@@ -17,15 +17,8 @@ public class MenuView {
         this.dos = dos;
     }
 
-    public void clearScreen() throws IOException {
-        dos.writeUTF(AnsiColors.ANSI_CLS);
-        dos.flush();
-    }
-
-    // --- Méthodes d'affichage des Menus ---
-
     public void showMainMenu() throws IOException {
-        // clearScreen(); // Optionnel ici, peut être fait avant l'appel
+
         dos.writeUTF("\r\n\r\n");
         StringBuilder menu = new StringBuilder();
         menu.append(AnsiColors.WHITE).append("==========================================\r\n");
@@ -45,7 +38,7 @@ public class MenuView {
     }
 
     public void showUserMenu() throws IOException {
-        // clearScreen(); // Optionnel
+
         StringBuilder menu = new StringBuilder();
         menu.append("\r\n" + AnsiColors.YELLOW + "====== USER MENU ======" + AnsiColors.RESET + "\r\n");
         menu.append(AnsiColors.GREEN).append("1. Manage Contacts\r\n");
@@ -60,7 +53,7 @@ public class MenuView {
     }
 
     public void showContactsMenu() throws IOException {
-        // clearScreen(); // Optionnel
+
         StringBuilder menu = new StringBuilder();
         menu.append("\r\n" + AnsiColors.GREEN + "====== CONTACTS MENU ======" + AnsiColors.RESET + "\r\n");
         menu.append(AnsiColors.YELLOW).append("1. Add a Contact\r\n");
@@ -75,7 +68,7 @@ public class MenuView {
     }
 
     public void showGroupsMenu() throws IOException {
-        // clearScreen(); // Optionnel
+
         StringBuilder menu = new StringBuilder();
         menu.append("\r\n" + AnsiColors.MAGENTA + "====== GROUP MENU ======" + AnsiColors.RESET + "\r\n");
         menu.append(AnsiColors.YELLOW).append("1. Create a Group\r\n");
@@ -85,27 +78,28 @@ public class MenuView {
         menu.append(AnsiColors.BLUE).append("5. Show My Groups\r\n");
         menu.append(AnsiColors.WHITE).append("6. Show Group Members\r\n");
         menu.append(AnsiColors.YELLOW).append("7. Group Conversation\r\n");
-        menu.append(AnsiColors.BLUE).append("8. Return to User Menu\r\n"); // Retour au menu User
-        menu.append(AnsiColors.MAGENTA).append("========================" + AnsiColors.RESET + "\r\n");
-        menu.append(AnsiColors.CYAN).append("Please enter your choice: ").append(AnsiColors.RESET);
+        menu.append(AnsiColors.BLUE).append("8. Leave Group\r\n");
+        menu.append(AnsiColors.MAGENTA).append("9. Return to User Menu\r\n"); // Retour au menu User
+        menu.append(AnsiColors.CYAN).append("========================" + AnsiColors.RESET + "\r\n");
+        menu.append(AnsiColors.YELLOW).append("Please enter your choice: ").append(AnsiColors.RESET);
         dos.writeUTF(menu.toString());
         dos.flush();
     }
 
-    // --- Méthodes Utilitaires ---
+
 
     private void promptWithMessage(String message) throws IOException {
         dos.writeUTF(message);
         dos.flush();
         try {
-            // Lire pour créer la pause, ignorer le contenu
+
             String dummyInput = dis.readUTF();
-            if (dummyInput == null) { // Gérer déconnexion pendant la pause
+            if (dummyInput == null) {
                 throw new EOFException("Client disconnected while waiting for prompt.");
             }
         } catch (EOFException | SocketException e) {
             System.err.println(AnsiColors.YELLOW + "[PROMPT] Client disconnected: " + e.getMessage() + AnsiColors.RESET);
-            throw e; // Remonter l'exception pour que l'appelant gère la déconnexion
+            throw e;
         }
     }
 
@@ -117,10 +111,6 @@ public class MenuView {
         promptWithMessage("\r\n" + message);
     }
 
-    // Surcharge pour message par défaut
-    public void promptBeforeRetry() throws IOException {
-        promptBeforeRetry(AnsiColors.YELLOW + "Press Enter to try again..." + AnsiColors.RESET);
-    }
 
     public void sendFeedback(String message, String color) throws IOException {
         String border = color + "-----------------------------------------" + AnsiColors.RESET;
@@ -128,8 +118,5 @@ public class MenuView {
         dos.flush();
     }
 
-    public void sendFeedback(String message) throws IOException {
-        dos.writeUTF("\r\n" + message + "\r\n"); // Message simple
-        dos.flush();
-    }
+
 }

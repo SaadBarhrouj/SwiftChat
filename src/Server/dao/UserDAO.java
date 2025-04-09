@@ -1,5 +1,7 @@
 package Server.dao;
 
+import Server.utils.ValidationUtils;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,22 +10,17 @@ import java.sql.SQLException;
 public class UserDAO {
     private Connection conn;
 
-
     public UserDAO(Connection conn) {
         this.conn = conn;
     }
 
-    private boolean isValidEmail(String email) {
-        String emailRegex = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$";
-        return email != null && email.matches(emailRegex);
-    }
 
     public boolean userExists(String email) {
         String sql = "SELECT * FROM users WHERE email = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, email);
             ResultSet rs = pstmt.executeQuery();
-            return rs.next(); // Retourne true si un utilisateur avec cet email existe
+            return rs.next();
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -31,7 +28,7 @@ public class UserDAO {
     }
 
     public boolean insertUser(String name, String email, String password, String confirmPassword) {
-        if (!isValidEmail(email)) {
+        if (!ValidationUtils.isValidEmail(email)) {
             System.out.println("Invalid email format.");
             return false;
         }
@@ -51,7 +48,7 @@ public class UserDAO {
             pstmt.setString(1, name);
             pstmt.setString(2, email.toLowerCase());
             pstmt.setString(3, password);
-            return pstmt.executeUpdate() > 0; // Retourne true si l'insertion a réussi
+            return pstmt.executeUpdate() > 0;
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -59,7 +56,7 @@ public class UserDAO {
     }
 
     public ResultSet getUserByEmailAndPassword(String email, String password) {
-        if (!isValidEmail(email)) {
+        if (!ValidationUtils.isValidEmail(email)) {
             System.out.println("Invalid email format.");
             return null;
         }
@@ -76,13 +73,12 @@ public class UserDAO {
         }
     }
 
-
     public int getUserIdByEmail(String email) {
         String sql = "SELECT user_id FROM users WHERE email = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, email);
             ResultSet rs = pstmt.executeQuery();
-            return rs.next() ? rs.getInt("user_id") : -1; // Retourne l'ID si trouvé, -1 sinon
+            return rs.next() ? rs.getInt("user_id") : -1;
         } catch (SQLException e) {
             e.printStackTrace();
             return -1;
@@ -94,13 +90,12 @@ public class UserDAO {
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, userId);
             ResultSet rs = pstmt.executeQuery();
-            return rs.next() ? rs.getString("email") : null; // Retourne l'email si trouvé, null sinon
+            return rs.next() ? rs.getString("email") : null;
         } catch (SQLException e) {
             e.printStackTrace();
             return null;
         }
     }
-
 
     public void updateName(int userId, String newName) {
         try {
@@ -138,24 +133,6 @@ public class UserDAO {
         }
     }
 
-
-    public void updateProfile(int userId, String newEmail, String newPassword, String newName) {
-        updateEmail(userId, newEmail);
-        updateName(userId, newName);
-        updatePassword(userId, newPassword);
-    }
-
-    public boolean isUserOnline(int userId) {
-        String sql = "SELECT is_online FROM users WHERE user_id = ?";
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, userId);
-            ResultSet rs = pstmt.executeQuery();
-            return rs.next() && rs.getBoolean("is_online");
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
     public void setUserOnlineStatus(int userId, boolean isOnline) {
         String sql = "UPDATE users SET is_online = ? WHERE user_id = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {

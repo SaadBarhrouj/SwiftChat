@@ -2,10 +2,8 @@ package Server.controllers;
 
 import Server.dao.UserDAO;
 import Server.entities.User;
-import Server.utils.AnsiColors;
-import Server.utils.ValidationUtils;
-import Server.views.HelpView;
-import Server.views.MenuView;
+import Server.utils.*;
+import Server.views.*;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -54,8 +52,7 @@ public class AuthenticationController {
             if (trimmedChoice.isEmpty()) continue;
 
             switch (trimmedChoice) {
-                case "a": // Sign Up
-                    // Gérer la potentielle déconnexion pendant l'inscription
+                case "a":
                     try {
                         authenticatedUser = handleRegistration();
                         isAuthenticated = (authenticatedUser != null);
@@ -64,12 +61,11 @@ public class AuthenticationController {
                         }
                     } catch (EOFException | SocketException e) {
                         System.err.println(AnsiColors.YELLOW + "[AUTH] Client disconnected (" + e.getClass().getSimpleName() + ") during registration." + AnsiColors.RESET);
-                        return null; // Sortir si déco
+                        return null;
                     }
                     break;
 
-                case "b": // Log In
-                    // Gérer la potentielle déconnexion pendant la connexion
+                case "b":
                     try {
                         authenticatedUser = handleLogin();
                         isAuthenticated = (authenticatedUser != null);
@@ -78,17 +74,17 @@ public class AuthenticationController {
                         }
                     } catch (EOFException | SocketException e) {
                         System.err.println(AnsiColors.YELLOW + "[AUTH] Client disconnected (" + e.getClass().getSimpleName() + ") during login." + AnsiColors.RESET);
-                        return null; // Sortir si déco
+                        return null;
                     }
                     break;
 
-                case "c": // Help
+                case "c":
                     try {
                         helpView.displayGeneralHelp();
                         menuView.promptBeforeRetry("Press Enter to return to the main menu...");
                     } catch (EOFException | SocketException e) {
                         System.err.println(AnsiColors.YELLOW + "[AUTH] Client disconnected (" + e.getClass().getSimpleName() + ") during help prompt." + AnsiColors.RESET);
-                        return null; // Sortir si déco
+                        return null;
                     }
                     break;
 
@@ -98,7 +94,7 @@ public class AuthenticationController {
                         menuView.promptBeforeRetry("Press Enter to try again...");
                     } catch (EOFException | SocketException e) {
                         System.err.println(AnsiColors.YELLOW + "[AUTH] Client disconnected (" + e.getClass().getSimpleName() + ") during invalid choice prompt." + AnsiColors.RESET);
-                        return null; // Sortir si déco
+                        return null;
                     }
                     break;
             }
@@ -111,7 +107,7 @@ public class AuthenticationController {
 
     private User handleLogin() throws IOException {
         String email = null, password = null;
-        // Le try-catch gère la déconnexion pendant la saisie
+
         try {
             dos.writeUTF(AnsiColors.GREEN + "\r\n--- Log In ---" + AnsiColors.RESET);
             dos.writeUTF(AnsiColors.CYAN + "Email:" + AnsiColors.RESET); dos.flush();
@@ -119,15 +115,14 @@ public class AuthenticationController {
             dos.writeUTF(AnsiColors.CYAN + "Password:" + AnsiColors.RESET); dos.flush();
             password = dis.readUTF();
             if (email == null || password == null) throw new EOFException("Client disconnected during login input.");
-            return login(email, password); // Appelle la logique métier
+            return login(email, password);
         } catch (EOFException | SocketException e) {
-            throw e; // Remonter pour handleAuthentication
+            throw e;
         }
     }
 
     private User handleRegistration() throws IOException {
         String name = null, email = null, password = null, confirmPassword = null;
-        // Le try-catch gère la déconnexion pendant la saisie
         try {
             dos.writeUTF(AnsiColors.GREEN + "\r\n--- Sign Up ---" + AnsiColors.RESET);
             dos.writeUTF(AnsiColors.CYAN + "Name:" + AnsiColors.RESET); dos.flush(); name = dis.readUTF();
@@ -135,9 +130,9 @@ public class AuthenticationController {
             dos.writeUTF(AnsiColors.CYAN + "Password:" + AnsiColors.RESET); dos.flush(); password = dis.readUTF();
             dos.writeUTF(AnsiColors.CYAN + "Confirm Password:" + AnsiColors.RESET); dos.flush(); confirmPassword = dis.readUTF();
             if (name==null || email==null || password==null || confirmPassword==null) throw new EOFException("Client disconnected during registration input.");
-            return register(name, email, password, confirmPassword); // Appelle la logique métier
+            return register(name, email, password, confirmPassword);
         } catch (EOFException | SocketException e) {
-            throw e; // Remonter pour handleAuthentication
+            throw e;
         }
     }
 
@@ -158,11 +153,11 @@ public class AuthenticationController {
             System.err.println(AnsiColors.RED + "[LOGIN DB ERROR] for " + emailLower + ": " + e.getMessage() + AnsiColors.RESET);
             menuView.sendFeedback("Server error during login.", AnsiColors.RED); return null;
         }
-        // IOException (network error) should be caught by handleLogin
+
     }
 
     private User register(String name, String email, String password, String confirmPassword) throws IOException {
-        // Note: J'ai retiré les appels SoundPlayer pour simplifier, remettez-les si nécessaire
+
         try {
             if (name.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
                 menuView.sendFeedback("All fields are required.", AnsiColors.RED); return null;
@@ -200,6 +195,6 @@ public class AuthenticationController {
             System.err.println(AnsiColors.RED + "[REGISTER UNEXPECTED ERROR]: " + e.getMessage() + AnsiColors.RESET);
             menuView.sendFeedback("Unexpected error during registration.", AnsiColors.RED); return null;
         }
-        // IOException (network error) should be caught by handleRegistration
+
     }
 }

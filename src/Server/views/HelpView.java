@@ -8,16 +8,14 @@ import java.io.IOException;
 public class HelpView {
 
     private final DataOutputStream dos;
-    private final MenuView menuView; // Pour appeler promptContinue si nécessaire
 
-    public HelpView(DataOutputStream dos, MenuView menuView) {
+    public HelpView(DataOutputStream dos) {
         this.dos = dos;
-        this.menuView = menuView;
     }
 
     public void displayGeneralHelp() throws IOException {
         StringBuilder help = new StringBuilder();
-        help.append(AnsiColors.ANSI_CLS); // Clear screen
+        help.append(AnsiColors.ANSI_CLS);
         help.append(AnsiColors.YELLOW + "====== SwiftChat Help & Information ======" + AnsiColors.RESET + "\r\n\r\n");
         help.append(AnsiColors.CYAN + "SwiftChat" + AnsiColors.RESET + " is a command-line chat application allowing:\r\n");
         help.append("- User registration and login.\r\n");
@@ -39,7 +37,7 @@ public class HelpView {
 
         dos.writeUTF(help.toString());
         dos.flush();
-        // Le prompt est géré par l'appelant (AuthenticationController)
+
     }
 
     public void showChatHelp() throws IOException {
@@ -56,12 +54,12 @@ public class HelpView {
 
         dos.writeUTF(help.toString());
         dos.flush();
-        // Pas de prompt ici, le chat réaffichera le prompt ">"
+
     }
 
     public void showGroupChatHelp() throws IOException {
-        // Pour l'instant, identique à l'aide du chat privé
+
         showChatHelp();
-        // Vous pourriez ajouter des commandes spécifiques aux groupes si nécessaire
+
     }
 }
