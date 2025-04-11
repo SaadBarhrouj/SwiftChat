@@ -3,7 +3,6 @@
 ![Java](https://img.shields.io/badge/Java-≥8-blue?logo=java&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-DB-orange?logo=mysql&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Development-yellow)
--->
 
 ## Overview
 
